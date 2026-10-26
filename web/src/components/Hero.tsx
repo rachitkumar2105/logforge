@@ -64,9 +64,15 @@ export function Hero({ headline }: { headline: BenchResult | undefined }) {
           follower replication with an in-sync set, consumer groups, idempotent producers and compaction. Every
           durability claim on this page comes from a test that killed a process.
         </p>
+        <p className="mt-4 max-w-2xl text-sm text-muted">
+          <strong className="font-semibold text-text">Live and recorded, plainly.</strong> The hosted demo is a single
+          broker on a free tier: it proves the broker runs, and the topology section shows it when it is awake. The
+          durability and throughput claims rest on the crash-recovery replay and on the benchmark and chaos results,
+          all measured on a local three-node cluster and committed to the repository.
+        </p>
         {r && c ? (
           <div className="mt-12 grid gap-2">
-            <p className="label">Measured throughput, three-broker cluster</p>
+            <p className="label">Measured throughput, local three-broker cluster</p>
             <p className="mono text-[length:clamp(2.2rem,1.4rem+3vw,4rem)] leading-none text-accent">
               {int(r.recordsPerSec)}
               <span className="ml-3 text-[0.4em] text-text">records/s</span>

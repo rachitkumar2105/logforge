@@ -6,6 +6,12 @@ The broker is hand-written and has **zero runtime dependencies**: segment files,
 
 Every durability claim in this repository comes from a test that killed a process, and every number comes from a recorded command with its full configuration. See `RUN-REPORT.md` for the evidence and `FINAL-AUDIT.md` for the summary.
 
+## What is live and what is recorded
+
+The hosted demo is **one broker** on Render's free tier (512 MB, no persistent disk, asleep after 15 idle minutes) behind the Next.js site on Vercel. It proves the broker runs: the site's topology section shows the real deployed node, labelled as one node, whenever it is awake, and a recorded snapshot, labelled as recorded, while it wakes or sleeps.
+
+One node cannot show replication, ISR changes, leader election or failover. Those claims rest on recorded evidence from a **local three-node cluster**: the crash-recovery replay on the site (a recorded `chaos/run-all.sh` leader-kill run, played entirely in the browser), `bench/results/` and `chaos/results/`. Every measured number in this repository and on the site comes from that local cluster, with the hardware recorded next to it.
+
 ## Layout
 
 | Path | What |
@@ -48,6 +54,27 @@ bash chaos/run-all.sh
 ```bash
 cd web && pnpm install && pnpm dev
 ```
+
+## Deploy (free tiers)
+
+**Broker on Render** (free web service, Docker, from this repository; `render.yaml` holds the settings). Set in the Render dashboard, Environment:
+
+| Variable | Value |
+|---|---|
+| `LOGFORGE_ADMIN_TOKEN` | a random secret, at least 24 characters (`openssl rand -hex 32`) |
+| `LOGFORGE_READ_TOKEN` | a different random secret, same length |
+| `LOGFORGE_CORS_ORIGINS` | the site's production origin, e.g. `https://<project>.vercel.app` |
+
+When creating the service by hand instead of from the Blueprint, also set `LOGFORGE_NODE_ID=1`, `LOGFORGE_ROLES=broker,controller`, `LOGFORGE_SEED_TOPIC=demo-orders:3:600`, `LOGFORGE_IO_THREADS=1`, `LOGFORGE_HANDLER_THREADS=2`, `JAVA_TOOL_OPTIONS` as in `render.yaml`, and the health check path `/health`. Render provides `PORT`; do not set it.
+
+**Site on Vercel** (Hobby, root directory `web`). Set in Project Settings, Environment Variables, for Production and Preview:
+
+| Variable | Value |
+|---|---|
+| `LOGFORGE_ADMIN_URL` | the Render service URL, e.g. `https://logforge-broker.onrender.com` |
+| `LOGFORGE_READ_TOKEN` | the same read token as on Render |
+
+Both are server-side only. Never prefix them with `NEXT_PUBLIC_`, and never give the site the admin token.
 
 ## Durability, in one table
 

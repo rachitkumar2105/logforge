@@ -1,0 +1,27 @@
+name: uptime
+
+# Daily check that the hosted broker answers. It allows two minutes because the free instance
+# sleeps after 15 idle minutes and takes about a minute to wake. Set the repository variable
+# BROKER_URL (Settings > Secrets and variables > Actions > Variables) to the Render URL.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    if: ${{ vars.BROKER_URL != '' }}
+    timeout-minutes: 5
+    steps:
+      - name: GET /health
+        run: |
+          for i in 1 2 3 4; do
+            if curl -fsS --max-time 30 "${{ vars.BROKER_URL }}/health"; then exit 0; fi
+            sleep 10
+          done
+          echo "broker did not answer /health within about two minutes" >&2
+          exit 1
