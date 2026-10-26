@@ -119,3 +119,30 @@ Built: `ReplicaFetcher`/`ReplicaFetcherManager` (followers pull; OffsetForLeader
 - In-process `halt()` closes files cleanly and `freeze()` keeps serving requests; those tests check replication logic, not crash recovery. Crash claims rest on the process-level tests above.
 - Election time is dominated by the configured session timeout; not tuned further.
 - `FollowerPauseProcessTest` is skipped on Windows (no POSIX signals) and was run on Linux only.
+
+---
+
+## Phase 5: Consumer groups and compaction
+
+Built: `GroupCoordinator` (join barrier, heartbeat-driven rebalance, session expiry, leave, range and round-robin assignment on the coordinator, generation-fenced offset commits stored in the compacted `__consumer_offsets` topic and reloaded on leadership change), client `GroupMembership` (coordinator discovery, background heartbeats, commit-before-rejoin), `Compactor` (newest record per key below the high watermark, offsets preserved, tombstones kept for `delete.retention.ms`, atomic `.cleaned` swap). The idempotent producer was built in Phases 2 and 3; this phase proves it end to end.
+
+### Verified
+- Broker tests: `AssignorsTest` 4/4, `GroupCoordinatorTest` 5/5 (barrier, session expiry, leave, inconsistent assignor, generation-fenced commits that survive a broker restart), `CompactorTest` 3/3, `IdempotentFailoverTest` 1/1 (a retry sent to the new leader after the old one died returns the original offset; nothing appended).
+- **Gate, exactly-once per partition under a forced retry** (`ProducerRetryDedupTest`: a proxy delivers the first Produce, waits for the broker to append, then cuts the connection before the response). Three runs, identical output each time:
+  ```
+  forced retry (idempotent=true): produce requests delivered=2, copies in log=1
+  forced retry (idempotent=false): produce requests delivered=2, copies in log=2
+  ```
+  The control run proves the retry really reached the broker twice.
+- `ConsumerGroupTest` (3 members, 6 partitions, 3,000 records; one member stops heartbeating without leaving after committing part of a partition), 5 consecutive passes, e.g.:
+  ```
+  partition 2 (495 records): victim read to 49 and committed 40; survivors resumed at 40
+  partition 3 (475 records): victim read to -1 and committed 0; survivors resumed at 0
+  ```
+  Every offset of every partition was consumed (no gap). Offsets 40 to 49 were delivered twice: the victim read them but died before committing, which is the documented at-least-once behaviour.
+- `./mvnw -B -ntp verify` (before the final formatting fix, which changed only line endings): broker 79 tests, `All coverage checks have been met.`; client 12 tests (1 skipped on Windows: SIGSTOP). Coverage: log 0.856, replication 0.876, coordinator 0.862, controller 0.892.
+
+### Not verified / assumed
+- Two tests were wrong and were corrected; the reasons are in commit `45ddfc0`: the non-idempotent control expected offset 0 instead of 1, and the group test raced a fixed sleep and counted pre-rebalance reads as the takeover.
+- Group membership is in memory: after a coordinator failover members rejoin (UNKNOWN_MEMBER_ID). Measured only in the single-node tests above, not under coordinator failover.
+- Compaction drops batches that end up empty, so the leader-epoch history can lose entries for fully compacted ranges. A follower's truncation is then more conservative (it re-fetches more), never less safe. Not exercised by a test.
