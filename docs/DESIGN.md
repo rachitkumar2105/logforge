@@ -22,7 +22,7 @@ Dark-first; a light theme exists for `prefers-color-scheme: light` but the desig
 | `--line` | `#26313a` | `#d4dade` | hairlines, frames |
 | `--text` | `#e6edf3` | `#11171c` | body text |
 | `--muted` | `#93a1ad` | `#4c5963` | labels (contrast >= 4.5:1 on `--bg` and `--panel`) |
-| `--accent` | `#3ddbc4` (teal) | `#0b7f71` | leaders, live data, focus, links |
+| `--accent` | `#3ddbc4` (teal) | `#0a776a` | leaders, live data, focus, links |
 | `--accent-dim` | `#1f6f64` | `#9ad9cf` | followers in sync, secondary series |
 | `--fail` | `#ff5c57` | `#c42b26` | **only** failure, offline and under-replicated states |
 | `--warn-line` | `#5a6670` | `#9aa6ae` | out-of-sync follower outline (neutral, not a colour signal) |
