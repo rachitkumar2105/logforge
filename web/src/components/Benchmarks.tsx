@@ -177,8 +177,9 @@ export function Benchmarks({ results, repoUrl }: { results: BenchResult[]; repoU
         </figure>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
-          <div className="panel p-4">
+          <div className="panel min-w-0 p-4">
             <p className="label mb-3">End-to-end latency, acks=all, 1,000 records/s, 1 KB</p>
+            <div className="overflow-x-auto">
             <table className="data">
               <thead>
                 <tr>
@@ -202,11 +203,12 @@ export function Benchmarks({ results, repoUrl }: { results: BenchResult[]; repoU
                 })}
               </tbody>
             </table>
+            </div>
           </div>
-          <div className="panel p-4 text-sm">
+          <div className="panel min-w-0 p-4 text-sm">
             <p className="label mb-3">Measured on</p>
             {hw ? (
-              <dl className="mono grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1 text-xs">
+              <dl className="mono grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs [overflow-wrap:anywhere]">
                 <dt className="text-muted">host</dt>
                 <dd>{hw.host}</dd>
                 <dt className="text-muted">containers</dt>
