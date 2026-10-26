@@ -50,8 +50,11 @@ final class ChaosClient {
     int rate = Integer.parseInt(a.getOrDefault("rate", "2000"));
     int partitions = Integer.parseInt(a.getOrDefault("partitions", "3"));
     int size = Math.max(8, Integer.parseInt(a.getOrDefault("size", "8")));
+    // --rf 1 drives a single-node broker (the hosted-mode memory test); chaos runs use 3.
+    int rf = Integer.parseInt(a.getOrDefault("rf", "3"));
     try (Admin admin = new Admin(bootstrap, 60_000)) {
-      admin.createTopic(topic, partitions, 3, Map.of("min.insync.replicas", "2"));
+      admin.createTopic(
+          topic, partitions, rf, Map.of("min.insync.replicas", Integer.toString(Math.min(2, rf))));
     }
     ConcurrentLinkedQueue<String> acked = new ConcurrentLinkedQueue<>();
     AtomicLong failures = new AtomicLong();

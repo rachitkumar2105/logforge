@@ -20,6 +20,9 @@ USER logforge
 ENV LOGFORGE_DATA_DIR=/data
 VOLUME ["/data"]
 EXPOSE 9092 8080
+# PORT is set by hosting platforms (Render); the admin API listens there when it is.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
-  CMD wget -qO- http://127.0.0.1:8080/health >/dev/null 2>&1 || exit 1
-ENTRYPOINT ["java", "-XX:+UseG1GC", "-XX:MaxRAMPercentage=60", "-jar", "/app/logforge-broker.jar"]
+  CMD wget -qO- "http://127.0.0.1:${PORT:-8080}/health" >/dev/null 2>&1 || exit 1
+# Heap and GC come from JAVA_TOOL_OPTIONS when it is set (docker-compose.yml, render.yaml);
+# otherwise the JVM picks its collector and caps the heap at 60% of the container's memory.
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=60", "-jar", "/app/logforge-broker.jar"]

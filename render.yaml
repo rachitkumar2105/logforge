@@ -1,0 +1,35 @@
+# Render Blueprint for the hosted demo: one LogForge node (controller and broker) on the free web
+# service tier. Free tier facts this is designed around: 512 MB RAM, no persistent disk (the log
+# is lost on every restart, so the node seeds a sample topic), spins down after 15 idle minutes.
+# Only the admin HTTP API is reachable (Render routes the public URL to PORT); the binary
+# protocol on 9092 stays inside the container.
+services:
+  - type: web
+    name: logforge-broker
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: LOGFORGE_NODE_ID
+        value: "1"
+      - key: LOGFORGE_ROLES
+        value: broker,controller
+      - key: LOGFORGE_SEED_TOPIC
+        value: demo-orders:3:600
+      - key: LOGFORGE_IO_THREADS
+        value: "1"
+      - key: LOGFORGE_HANDLER_THREADS
+        value: "2"
+      # Heap capped at 300 MB with a serial collector; measured locally under a 512 MB, 0.1 CPU
+      # limit (RUN-REPORT.md, Phase 10).
+      - key: JAVA_TOOL_OPTIONS
+        value: -Xmx300m -Xms64m -XX:+UseSerialGC -Xss512k -XX:MaxMetaspaceSize=96m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=64m -XX:TieredStopAtLevel=1 -XX:+ExitOnOutOfMemoryError
+      # Set these three in the Render dashboard; they are never committed.
+      - key: LOGFORGE_ADMIN_TOKEN
+        sync: false
+      - key: LOGFORGE_READ_TOKEN
+        sync: false
+      - key: LOGFORGE_CORS_ORIGINS
+        sync: false
