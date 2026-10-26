@@ -49,6 +49,7 @@ final class ChaosClient {
     Path stop = Path.of(a.get("stop"));
     int rate = Integer.parseInt(a.getOrDefault("rate", "2000"));
     int partitions = Integer.parseInt(a.getOrDefault("partitions", "3"));
+    int size = Math.max(8, Integer.parseInt(a.getOrDefault("size", "8")));
     try (Admin admin = new Admin(bootstrap, 60_000)) {
       admin.createTopic(topic, partitions, 3, Map.of("min.insync.replicas", "2"));
     }
@@ -78,7 +79,7 @@ final class ChaosClient {
           continue;
         }
         long id = sent++;
-        p.send(topic, null, ByteBuffer.allocate(8).putLong(id).array())
+        p.send(topic, null, ByteBuffer.allocate(size).putLong(0, id).array())
             .whenComplete(
                 (md, err) -> {
                   if (err == null) {
@@ -101,6 +102,101 @@ final class ChaosClient {
       }
     }
     System.out.printf("chaos-produce: sent=%d failed=%d%n", sent, failures.get());
+  }
+
+  /**
+   * Polls the controller's admin API (token from the LOGFORGE_READ_TOKEN environment variable,
+   * never a command-line argument) every 200 ms and appends each cluster view, with this
+   * container's clock, to a JSON-lines file until the stop file appears.
+   */
+  static void record(Map<String, String> a) throws Exception {
+    String admin = a.get("admin");
+    String token = System.getenv("LOGFORGE_READ_TOKEN");
+    Path out = Path.of(a.get("out"));
+    Path stop = Path.of(a.get("stop"));
+    java.net.http.HttpClient http = java.net.http.HttpClient.newHttpClient();
+    java.net.http.HttpRequest req =
+        java.net.http.HttpRequest.newBuilder(java.net.URI.create(admin + "/api/v1/cluster"))
+            .header("Authorization", "Bearer " + token)
+            .timeout(Duration.ofSeconds(2))
+            .build();
+    try (BufferedWriter w = Files.newBufferedWriter(out, UTF_8)) {
+      while (!Files.exists(stop)) {
+        long t = System.currentTimeMillis();
+        try {
+          java.net.http.HttpResponse<String> r =
+              http.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+          if (r.statusCode() == 200) {
+            w.write("{\"t\":" + t + ",\"cluster\":" + r.body() + "}");
+            w.newLine();
+            w.flush();
+          }
+        } catch (java.io.IOException e) {
+          // controller briefly unreachable: skip this sample
+        }
+        Thread.sleep(200);
+      }
+    }
+  }
+
+  /**
+   * Joins the recorded cluster views with the producer's ack log into the replay the website plays:
+   * one frame per sample with broker liveness, partition leaders, ISRs, replica log end offsets and
+   * the cumulative acknowledged count, plus the measured events.
+   */
+  @SuppressWarnings("unchecked")
+  static Map<String, Object> replay(
+      Path timeline, String topic, List<long[]> acksByTime, long gapStart, long gapMs)
+      throws Exception {
+    List<Object> frames = new ArrayList<>();
+    long t0 = -1;
+    int ackIdx = 0;
+    for (String line : Files.readAllLines(timeline, UTF_8)) {
+      Map<String, Object> sample = Json.parseObject(line);
+      long t = ((Number) sample.get("t")).longValue();
+      if (t0 < 0) {
+        t0 = t;
+      }
+      while (ackIdx < acksByTime.size() && acksByTime.get(ackIdx)[1] <= t) {
+        ackIdx++;
+      }
+      Map<String, Object> cluster = (Map<String, Object>) sample.get("cluster");
+      List<Object> brokers = new ArrayList<>();
+      for (Object b : (List<Object>) cluster.get("brokers")) {
+        Map<String, Object> bm = (Map<String, Object>) b;
+        if (Boolean.TRUE.equals(bm.get("controller"))) {
+          continue;
+        }
+        brokers.add(Json.obj("id", bm.get("id"), "alive", bm.get("alive")));
+      }
+      List<Object> partitions = new ArrayList<>();
+      for (Object to : (List<Object>) cluster.get("topics")) {
+        Map<String, Object> tm = (Map<String, Object>) to;
+        if (!topic.equals(tm.get("name"))) {
+          continue;
+        }
+        for (Object po : (List<Object>) tm.get("partitions")) {
+          Map<String, Object> pm = (Map<String, Object>) po;
+          partitions.add(
+              Json.obj(
+                  "partition", pm.get("partition"),
+                  "leader", pm.get("leader"),
+                  "leaderEpoch", pm.get("leaderEpoch"),
+                  "isr", pm.get("isr"),
+                  "replicaState", pm.get("replicaState")));
+        }
+      }
+      frames.add(
+          Json.obj("t", t - t0, "acked", ackIdx, "brokers", brokers, "partitions", partitions));
+    }
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("topic", topic);
+    out.put("sampleIntervalMs", 200);
+    out.put("leaderStoppedAtMs", gapStart - t0);
+    out.put("writesResumedAtMs", gapStart + gapMs - t0);
+    out.put("recoveryTimeMs", gapMs);
+    out.put("frames", frames);
+    return out;
   }
 
   static void verify(Map<String, String> a) throws Exception {
@@ -191,6 +287,11 @@ final class ChaosClient {
     doc.put("command", a.getOrDefault("command", "(not recorded)"));
     Path out = Path.of(a.get("out"));
     Files.writeString(out, Json.write(doc) + "\n", UTF_8);
+    if (a.containsKey("timeline") && Files.exists(Path.of(a.get("timeline")))) {
+      Map<String, Object> replay =
+          replay(Path.of(a.get("timeline")), topic, acks, gapAt, longestGap);
+      Files.writeString(Path.of(a.get("replay")), Json.write(replay) + "\n", UTF_8);
+    }
     System.out.println(Json.write(doc));
   }
 }

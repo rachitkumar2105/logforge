@@ -46,6 +46,8 @@ public final class Main {
       case "summarize" -> summarize(Path.of(a.get("in")));
       case "chaos-produce" -> ChaosClient.produce(a);
       case "chaos-verify" -> ChaosClient.verify(a);
+      case "chaos-record" -> ChaosClient.record(a);
+      case "segment-sample" -> SegmentSample.write(Path.of(a.get("out")));
       default -> {
         System.err.println("unknown command " + argv[0]);
         System.exit(2);

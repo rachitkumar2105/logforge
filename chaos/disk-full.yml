@@ -1,0 +1,7 @@
+# Compose override for the disk-full scenario: broker3 keeps its data on a 48 MiB tmpfs, so a
+# steady write load fills it within seconds. uid/gid 100:101 is the image's non-root user.
+services:
+  broker3:
+    volumes: !reset []
+    tmpfs:
+      - /data:size=48m,uid=100,gid=101,mode=0750

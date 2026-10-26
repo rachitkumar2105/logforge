@@ -43,3 +43,6 @@ test-results/
 playwright-report/
 dependency-check-report.*
 .claude/settings.local.json
+
+# Chaos scratch (ack logs)
+chaos/work/
