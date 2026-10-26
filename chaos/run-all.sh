@@ -90,6 +90,10 @@ run_scenario() {
     --out "/results/$name.json" --scenario "$name" --description "$description" --rate 2000 \
     --command "bash chaos/run-all.sh $name" "${replay_args[@]}" | tail -1 |
     python -c "import json,sys; d=json.load(sys.stdin); print('   verdict', d['verdict'], 'acked', d['acked'], 'missing', d['missingAcked'], 'duplicates', d['duplicates'], 'recovery ms', d['recoveryTimeMs'])"
+  # Keep every node's log for diagnosis (chaos/work is not committed).
+  for c in controller broker1 broker2 broker3; do
+    docker logs "logforge-$c-1" > "$WORK/$name-$c.log" 2>&1 || true
+  done
   compose down -v >/dev/null
 }
 
