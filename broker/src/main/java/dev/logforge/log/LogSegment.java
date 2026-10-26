@@ -58,7 +58,7 @@ public final class LogSegment implements Closeable {
   /** Outcome of {@link #recover()}. */
   public record RecoveryResult(int validBatches, long truncatedBytes) {}
 
-  private LogSegment(Path dir, long baseOffset, LogConfig config, boolean create)
+  private LogSegment(Path dir, long baseOffset, LogConfig config, boolean create, boolean sealed)
       throws IOException {
     this.dir = dir;
     this.baseOffset = baseOffset;
@@ -72,7 +72,7 @@ public final class LogSegment implements Closeable {
     this.channel =
         FileChannel.open(
             logFile, StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE);
-    this.index = new OffsetIndex(indexFile, baseOffset, config.maxIndexBytes());
+    this.index = new OffsetIndex(indexFile, baseOffset, config.maxIndexBytes(), !sealed);
     long fileSize = channel.size();
     if (fileSize > Integer.MAX_VALUE) {
       throw new IOException("segment larger than 2 GiB: " + logFile);
@@ -81,8 +81,20 @@ public final class LogSegment implements Closeable {
     this.nextOffset = baseOffset;
     this.createdAtMs = System.currentTimeMillis();
     if (!create && size > 0) {
-      if (!index.isConsistentWith(size)) {
+      boolean rebuild = !index.isConsistentWith(size);
+      if (!rebuild && loadTail()) {
+        // The index ends earlier than the data says it should ("shorter than the records file"),
+        // for example after a crash between a log write and the index write reaching disk.
+        rebuild = true;
+      }
+      if (rebuild) {
+        if (sealed) {
+          index.resize(config.maxIndexBytes());
+        }
         rebuildIndex();
+        if (sealed) {
+          index.trimToValidSize();
+        }
       }
       loadTail();
     }
@@ -94,12 +106,24 @@ public final class LogSegment implements Closeable {
 
   /** Creates a new empty segment, replacing any files with the same base offset. */
   public static LogSegment create(Path dir, long baseOffset, LogConfig config) throws IOException {
-    return new LogSegment(dir, baseOffset, config, true);
+    return new LogSegment(dir, baseOffset, config, true, false);
   }
 
-  /** Opens an existing segment. Call {@link #recover()} before appending to an unclean segment. */
+  /**
+   * Opens an existing segment as the active one (index pre-sized for appends). Call {@link
+   * #recover()} before appending to a segment that may have been shut down uncleanly.
+   */
   public static LogSegment open(Path dir, long baseOffset, LogConfig config) throws IOException {
-    return new LogSegment(dir, baseOffset, config, false);
+    return new LogSegment(dir, baseOffset, config, false, false);
+  }
+
+  /**
+   * Opens an existing sealed segment. Its index is mapped at its current size and only rewritten if
+   * it is missing, inconsistent or short.
+   */
+  public static LogSegment openSealed(Path dir, long baseOffset, LogConfig config)
+      throws IOException {
+    return new LogSegment(dir, baseOffset, config, false, true);
   }
 
   public long baseOffset() {
@@ -404,12 +428,18 @@ public final class LogSegment implements Closeable {
         });
   }
 
-  /** Finds the last batch by scanning forward from the last index entry. */
-  private void loadTail() throws IOException {
+  /**
+   * Finds the last batch by scanning forward from the last index entry.
+   *
+   * @return true if the index is short: more than one interval of data follows its last entry
+   *     (excluding the final batch), so an entry is missing
+   */
+  private boolean loadTail() throws IOException {
     IndexEntry last = index.lastEntry();
     long[] next = {baseOffset};
     long[] maxTs = {-1L};
     int[] bytesSince = {0};
+    int[] lastSize = {0};
     scan(
         last.position(),
         size,
@@ -418,11 +448,22 @@ public final class LogSegment implements Closeable {
           next[0] = batch.nextOffset();
           maxTs[0] = Math.max(maxTs[0], batch.maxTimestamp());
           bytesSince[0] += batch.sizeInBytes();
+          lastSize[0] = batch.sizeInBytes();
           return true;
         });
     nextOffset = next[0];
     maxTimestamp = maxTs[0];
     bytesSinceLastIndexEntry = bytesSince[0];
+    boolean couldHaveMoreEntries =
+        index.entryCount() < config.maxIndexBytes() / OffsetIndex.ENTRY_SIZE;
+    return couldHaveMoreEntries && bytesSince[0] - lastSize[0] >= config.indexIntervalBytes();
+  }
+
+  /** Raises the recorded newest timestamp (used when the owning log scans every batch). */
+  void observeTimestamp(long timestamp) {
+    if (timestamp > maxTimestamp) {
+      maxTimestamp = timestamp;
+    }
   }
 
   /**

@@ -33,21 +33,55 @@ public final class OffsetIndex implements Closeable {
   private int maxEntries;
   private volatile int entries;
 
+  /** Opens an index for appends, pre-sizing the file to {@code maxIndexBytes}. */
   public OffsetIndex(Path file, long baseOffset, int maxIndexBytes) throws IOException {
+    this(file, baseOffset, maxIndexBytes, true);
+  }
+
+  /**
+   * @param preallocate true for the active segment (grow the file so appends are memory writes);
+   *     false for a sealed segment, which maps the file at its current size and never resizes it
+   */
+  public OffsetIndex(Path file, long baseOffset, int maxIndexBytes, boolean preallocate)
+      throws IOException {
     this.file = file;
     this.baseOffset = baseOffset;
     boolean existed = Files.exists(file);
     this.raf = new RandomAccessFile(file.toFile(), "rw");
     long existingLength = existed ? raf.length() : 0L;
-    int capacity = Math.max(roundDown(maxIndexBytes), ENTRY_SIZE);
-    if (existingLength > capacity) {
-      capacity = roundDown((int) Math.min(existingLength, Integer.MAX_VALUE));
+    int existing = roundDown((int) Math.min(existingLength, Integer.MAX_VALUE));
+    int capacity =
+        preallocate ? Math.max(Math.max(roundDown(maxIndexBytes), ENTRY_SIZE), existing) : existing;
+    if (capacity != existingLength) {
+      setLength(raf, capacity);
     }
-    raf.setLength(capacity);
     this.maxEntries = capacity / ENTRY_SIZE;
     this.mmap = raf.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, capacity);
-    this.entries =
-        existed ? countValidEntries((int) Math.min(existingLength / ENTRY_SIZE, maxEntries)) : 0;
+    this.entries = existed ? countValidEntries(Math.min(existing / ENTRY_SIZE, maxEntries)) : 0;
+  }
+
+  /**
+   * {@code RandomAccessFile.setLength} with a short retry. On Windows a file cannot change length
+   * while any process has a view of it mapped, and on-access antivirus scanners briefly map freshly
+   * written files. The failure is transient, so a few retries over about a second resolve it.
+   */
+  static void setLength(RandomAccessFile raf, long length) throws IOException {
+    IOException last = null;
+    for (int attempt = 0; attempt < 40; attempt++) {
+      try {
+        raf.setLength(length);
+        return;
+      } catch (IOException e) {
+        last = e;
+        try {
+          Thread.sleep(25);
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+          throw e;
+        }
+      }
+    }
+    throw last;
   }
 
   private static int roundDown(int bytes) {
@@ -194,7 +228,7 @@ public final class OffsetIndex implements Closeable {
     capacity = Math.max(capacity, ENTRY_SIZE);
     mmap.force();
     MappedBuffers.unmap(mmap);
-    raf.setLength(capacity);
+    setLength(raf, capacity);
     mmap = raf.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, capacity);
     maxEntries = capacity / ENTRY_SIZE;
   }
@@ -208,7 +242,7 @@ public final class OffsetIndex implements Closeable {
     int bytes = entries * ENTRY_SIZE;
     mmap.force();
     MappedBuffers.unmap(mmap);
-    raf.setLength(bytes);
+    setLength(raf, bytes);
     mmap = raf.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, bytes);
     maxEntries = entries;
   }
