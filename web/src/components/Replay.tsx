@@ -230,9 +230,14 @@ export function Replay({ data, chaos }: { data: ReplayData | null; chaos: ChaosR
               {evs.map((e) => {
                 const done = passed.includes(e);
                 return (
-                  <li key={`${e.at}-${e.label}`} className={`grid grid-cols-[4.5rem_1fr] gap-2 text-sm ${done ? "" : "opacity-40"}`}>
+                  // Events not reached yet are muted by colour, not opacity, so they keep 4.5:1 contrast.
+                  <li key={`${e.at}-${e.label}`} className="grid grid-cols-[4.5rem_1fr] gap-2 text-sm">
                     <span className="mono text-muted">{ms(e.at)}</span>
-                    <span className={done && e.tone === "fail" ? "text-fail" : done && e.tone === "accent" ? "text-accent" : ""}>
+                    <span
+                      className={
+                        !done ? "text-muted" : e.tone === "fail" ? "text-fail" : e.tone === "accent" ? "text-accent" : ""
+                      }
+                    >
                       {e.label}
                     </span>
                   </li>
