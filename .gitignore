@@ -1,0 +1,45 @@
+# Secrets and keys
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+
+# Build output
+target/
+build/
+out/
+*.class
+
+# Log data (brokers write to ~/logforge-data or a mounted volume)
+*.log
+*.index
+*.cleaned
+*.swap
+*.deleted
+data/
+logs/
+
+# Node / Next.js
+node_modules/
+.next/
+.vercel/
+web/out/
+*.tsbuildinfo
+.pnpm-store/
+
+# IDE / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Tool scratch
+.playwright-cli/
+test-results/
+playwright-report/
+dependency-check-report.*
+.claude/settings.local.json
