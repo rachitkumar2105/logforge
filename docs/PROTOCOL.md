@@ -68,11 +68,11 @@ A record batch is the unit of append, replication, CRC and fetch.
 One record, key `"k"`, value `"v"`, no headers, timestamp equal to `baseTimestamp`, first batch of a partition:
 
 ```
-00 00 00 4D                 length = 77 (batch is 81 bytes)
+00 00 00 42                 length = 66 (batch is 70 bytes)
 00 00 00 00 00 00 00 00     baseOffset = 0
 00 00 00 00                 partitionLeaderEpoch = 0
 01                          magic = 1
-xx xx xx xx                 crc32c of bytes 21..80
+xx xx xx xx                 crc32c of bytes 21..69
 00 00                       attributes
 00 00 00 00                 lastOffsetDelta = 0
 00 00 01 92 ...             baseTimestamp
@@ -82,7 +82,7 @@ FF FF                       producerEpoch = -1
 FF FF FF FF                 baseSequence = -1
 00 00 00 01                 recordCount = 1
 -- record --
-14                          length = 10 (zig-zag 20)
+10                          length = 8 (zig-zag 16)
 00                          attributes
 00                          timestampDelta = 0
 00                          offsetDelta = 0
