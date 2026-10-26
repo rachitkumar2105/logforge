@@ -137,7 +137,9 @@ class AdminHttpServerTest {
     assertThat(detail.statusCode()).isEqualTo(200);
     Map<String, Object> topic = Json.parseObject(detail.body());
     assertThat(topic).containsEntry("name", "made-by-api");
-    assertThat((Map<?, ?>) topic.get("configs")).containsEntry("retention.ms", "60000");
+    @SuppressWarnings("unchecked")
+    Map<String, Object> configs = (Map<String, Object>) topic.get("configs");
+    assertThat(configs).containsEntry("retention.ms", "60000");
 
     assertThat(send("DELETE", "/api/v1/topics/made-by-api", ADMIN, null).statusCode())
         .isEqualTo(200);

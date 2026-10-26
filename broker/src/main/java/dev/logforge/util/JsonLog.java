@@ -30,7 +30,9 @@ public final class JsonLog {
   private static final ThreadLocal<String> CORRELATION = new ThreadLocal<>();
   private static volatile int nodeId = -1;
   private static volatile Level threshold = Level.INFO;
-  private static final PrintStream OUT = new PrintStream(System.err, true, StandardCharsets.UTF_8);
+  private static final PrintStream STDERR =
+      new PrintStream(System.err, true, StandardCharsets.UTF_8);
+  private static volatile PrintStream out = STDERR;
 
   private final String name;
 
@@ -48,6 +50,15 @@ public final class JsonLog {
 
   public static void setLevel(Level level) {
     threshold = level;
+  }
+
+  /** Redirects log output (tests). */
+  public static void setOutput(PrintStream stream) {
+    out = stream;
+  }
+
+  public static void resetOutput() {
+    out = STDERR;
   }
 
   /** Sets the correlation id for the current thread; returns the previous one. */
@@ -111,6 +122,6 @@ public final class JsonLog {
         m.put("errorMessage", t.getMessage());
       }
     }
-    OUT.println(Json.write(m));
+    out.println(Json.write(m));
   }
 }

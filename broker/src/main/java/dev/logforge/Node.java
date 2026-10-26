@@ -2,6 +2,8 @@ package dev.logforge;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+import dev.logforge.admin.AdminHttpServer;
+import dev.logforge.admin.Metrics;
 import dev.logforge.controller.Controller;
 import dev.logforge.controller.ControllerChannel;
 import dev.logforge.coordinator.GroupCoordinator;
@@ -62,6 +64,9 @@ public final class Node implements AutoCloseable {
   private volatile boolean replicationPaused;
   private ReplicaFetcherManager fetchers;
   private GroupCoordinator groupCoordinator;
+  private final Metrics metrics = new Metrics(System::currentTimeMillis);
+  private final long startedAtMs = System.currentTimeMillis();
+  private AdminHttpServer admin;
 
   private Node(NodeConfig config) {
     this.config = config;
@@ -121,6 +126,8 @@ public final class Node implements AutoCloseable {
               config.replicaFetchWaitMs,
               8 * 1024 * 1024);
       replicaManager.setFetcherControl(fetchers);
+      replicaManager.setLatencyObserver(metrics);
+      registerGauges();
       groupCoordinator =
           new GroupCoordinator(
               config.nodeId,
@@ -152,6 +159,23 @@ public final class Node implements AutoCloseable {
           config.heartbeatIntervalMs,
           config.heartbeatIntervalMs,
           TimeUnit.MILLISECONDS);
+    }
+    scheduler.scheduleWithFixedDelay(
+        () -> runSafely("rates", metrics::tickRates), 5, 5, TimeUnit.SECONDS);
+    if (config.adminEnabled()) {
+      admin =
+          new AdminHttpServer(
+              config,
+              AdminHttpServer.source(
+                  config.nodeId,
+                  config.roles.stream()
+                      .map(r -> r.name().toLowerCase(java.util.Locale.ROOT))
+                      .toList(),
+                  () -> System.currentTimeMillis() - startedAtMs,
+                  () -> controller,
+                  this::statusJson,
+                  metrics::render));
+      admin.start();
     }
     if (replicaManager != null) {
       // Own thread: a heartbeat can block for a session timeout when the controller is slow, and
@@ -320,7 +344,12 @@ public final class Node implements AutoCloseable {
         "bytesIn", replicaManager == null ? 0 : replicaManager.bytesIn(),
         "bytesOut", replicaManager == null ? 0 : replicaManager.bytesOut(),
         "connections", server == null ? 0 : server.openConnections(),
-        "groups", groupCoordinator == null ? List.of() : groupCoordinator.status());
+        "groups", groupCoordinator == null ? List.of() : groupCoordinator.status(),
+        "rates",
+            Json.obj(
+                "messagesInPerSec", metrics.messagesInPerSec(),
+                "bytesInPerSec", metrics.bytesInPerSec(),
+                "bytesOutPerSec", metrics.bytesOutPerSec()));
   }
 
   // ------------------------------------------------------------------ accessors (tests, admin)
@@ -444,6 +473,102 @@ public final class Node implements AutoCloseable {
     }
   }
 
+  /** Port of the admin HTTP server, or -1 if it is disabled. */
+  public int adminPort() {
+    return admin == null ? -1 : admin.port();
+  }
+
+  public Metrics metrics() {
+    return metrics;
+  }
+
+  /** Scrape-time gauges computed from live partition and group state. */
+  private void registerGauges() {
+    metrics.gauge(
+        "logforge_isr_size",
+        "In-sync replicas per partition this broker leads.",
+        () -> {
+          List<Metrics.Sample> out = new java.util.ArrayList<>();
+          replicaManager
+              .partitions()
+              .forEach(
+                  (tp, p) -> {
+                    if (p.isLeader()) {
+                      out.add(new Metrics.Sample(labels(tp), p.inSyncReplicas().size()));
+                    }
+                  });
+          return out;
+        });
+    metrics.gauge(
+        "logforge_under_replicated_partitions",
+        "Partitions led here whose ISR is smaller than their replica set.",
+        () -> {
+          long n =
+              replicaManager.partitions().values().stream()
+                  .filter(p -> p.isLeader() && p.inSyncReplicas().size() < p.replicas().size())
+                  .count();
+          return List.of(new Metrics.Sample(Map.of(), n));
+        });
+    metrics.gauge(
+        "logforge_log_end_offset",
+        "Log end offset of every replica on this broker.",
+        () -> {
+          List<Metrics.Sample> out = new java.util.ArrayList<>();
+          replicaManager
+              .partitions()
+              .forEach((tp, p) -> out.add(new Metrics.Sample(labels(tp), p.logEndOffset())));
+          return out;
+        });
+    metrics.gauge(
+        "logforge_high_watermark",
+        "High watermark of every replica on this broker.",
+        () -> {
+          List<Metrics.Sample> out = new java.util.ArrayList<>();
+          replicaManager
+              .partitions()
+              .forEach((tp, p) -> out.add(new Metrics.Sample(labels(tp), p.highWatermark())));
+          return out;
+        });
+    metrics.gauge(
+        "logforge_consumer_group_lag",
+        "High watermark minus committed offset, for groups coordinated here and partitions led here.",
+        this::groupLagSamples);
+  }
+
+  private static Map<String, String> labels(TopicPartition tp) {
+    return Map.of("topic", tp.topic(), "partition", Integer.toString(tp.partition()));
+  }
+
+  @SuppressWarnings("unchecked")
+  private List<Metrics.Sample> groupLagSamples() {
+    List<Metrics.Sample> out = new java.util.ArrayList<>();
+    if (groupCoordinator == null) {
+      return out;
+    }
+    for (Map<String, Object> g : groupCoordinator.status()) {
+      for (Object o : (List<Object>) g.get("committed")) {
+        Map<String, Object> c = (Map<String, Object>) o;
+        TopicPartition tp =
+            new TopicPartition((String) c.get("topic"), ((Number) c.get("partition")).intValue());
+        Partition p = replicaManager.partition(tp);
+        if (p != null && p.isLeader()) {
+          long lag = Math.max(0, p.highWatermark() - ((Number) c.get("committed")).longValue());
+          out.add(
+              new Metrics.Sample(
+                  Map.of(
+                      "group",
+                      (String) g.get("groupId"),
+                      "topic",
+                      tp.topic(),
+                      "partition",
+                      Integer.toString(tp.partition())),
+                  lag));
+        }
+      }
+    }
+    return out;
+  }
+
   public int mutedConnections() {
     return server == null ? 0 : server.mutedConnections();
   }
@@ -459,6 +584,9 @@ public final class Node implements AutoCloseable {
     }
     if (heartbeatThread != null) {
       heartbeatThread.shutdownNow();
+    }
+    if (admin != null) {
+      admin.close();
     }
     if (fetchers != null) {
       fetchers.close();

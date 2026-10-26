@@ -146,3 +146,30 @@ Built: `GroupCoordinator` (join barrier, heartbeat-driven rebalance, session exp
 - Two tests were wrong and were corrected; the reasons are in commit `45ddfc0`: the non-idempotent control expected offset 0 instead of 1, and the group test raced a fixed sleep and counted pre-rebalance reads as the takeover.
 - Group membership is in memory: after a coordinator failover members rejoin (UNKNOWN_MEMBER_ID). Measured only in the single-node tests above, not under coordinator failover.
 - Compaction drops batches that end up empty, so the leader-epoch history can lose entries for fully compacted ranges. A follower's truncation is then more conservative (it re-fetches more), never less safe. Not exercised by a test.
+
+---
+
+## Phase 6: Observability and admin API
+
+Built: `Metrics` (Prometheus text format: messages in per topic, 1-minute EWMA messages/s, bytes in/out, produce and fetch latency histograms, ISR size, under-replicated count, log end offset, high watermark, consumer group lag), `AdminHttpServer` (health, metrics, cluster view, topic detail, groups, segments, topic create/delete; bearer tokens, constant-time compare, read token cannot mutate, per-IP and per-token rate limits with 429 and Retry-After, exact CORS allowlist, 64 KiB body cap, security headers), JSON logs with correlation ids (`JsonLog`, `<connection>-<correlationId>` per request).
+
+### Verified
+- `MetricsTest` 3/3, `AdminHttpServerTest` 7/7 (including S13: read token gets 403 on POST and DELETE; S18: refuses to start without tokens, with a short one, or with equal ones, and the message never contains the value), `JsonLogTest` 3/3.
+- `./mvnw -B -ntp verify`: BUILD SUCCESS. Broker 92 tests, client 12 (1 skipped on Windows), bench 1. `All coverage checks have been met.` Line coverage:
+```
+  dev.logforge                     0.656 (440/671)
+  dev.logforge.admin               0.886 (492/555)
+  dev.logforge.controller          0.912 (354/388)
+  dev.logforge.coordinator         0.855 (360/421)
+  dev.logforge.log                 0.855 (1165/1363)
+  dev.logforge.network             0.871 (297/341)
+  dev.logforge.network.protocol    0.979 (663/677)
+  dev.logforge.replication         0.877 (837/954)
+  dev.logforge.util                0.846 (236/279)
+```
+- All earlier gates still pass inside this build: `GATE leader-kill: cycles=10 acked=1309401 ... missingAcked=0 duplicates=0`, `GATE 1M: ... distinct=1000000, duplicates=0`, forced retry 1 copy (idempotent) and 2 copies (control).
+- Test fix: `AdminHttpServerTest` did not compile on first run (a wildcard `Map<?, ?>` cast); the cast was corrected, no assertion changed.
+
+### Not verified / assumed
+- **Gate item "CI green; push to GitHub" is not done.** Pushing needs the author's approval and a GitHub remote; nothing has been pushed. CI has only been reproduced locally with the same `./mvnw -B -ntp verify` command.
+- Prometheus has not scraped `/metrics` for real; the format is checked by string assertions against the 0.0.4 text format.

@@ -65,6 +65,12 @@ public final class ReplicaManager implements Closeable {
 
     void fetch(boolean follower, long nanos);
 
+    /** Records appended as leader (not duplicates). */
+    default void append(String topic, int records, int bytes) {}
+
+    /** Bytes returned by fetches. */
+    default void bytesOut(long bytes) {}
+
     LatencyObserver NONE =
         new LatencyObserver() {
           @Override
@@ -291,6 +297,7 @@ public final class ReplicaManager implements Closeable {
       if (!info.duplicate()) {
         messagesIn.add(info.records());
         bytesIn.add(info.bytes());
+        latency.append(tp.topic(), info.records(), info.bytes());
         purgatory.checkAndComplete(tp); // followers and consumers parked on this partition
       } else {
         // Make the waiting logic see the original offsets for an idempotent retry.
@@ -443,6 +450,7 @@ public final class ReplicaManager implements Closeable {
 
   private Fetch.Response observe(Fetch.Response r, Fetch.Request req, long startNanos) {
     bytesOut.add(r.sizeInBytes());
+    latency.bytesOut(r.sizeInBytes());
     latency.fetch(req.isFromFollower(), System.nanoTime() - startNanos);
     return r;
   }
