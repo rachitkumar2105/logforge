@@ -357,7 +357,7 @@ Commits are appended (acks = all) to `__consumer_offsets` as a record with key `
 ### 5.11 OffsetFetch (11)
 
 Request: `groupId string`, `topics [ name string, partitions array<int32> ]` (null topics = all committed).
-Response: `topics [ name string, partitions [ partition int32, offset int64, errorCode int16 ] ]`. `offset = -1` means nothing committed.
+Response: `errorCode int16`, `topics [ name string, partitions [ partition int32, offset int64, errorCode int16 ] ]`. `offset = -1` means nothing committed. The top-level `errorCode` is `NOT_COORDINATOR` or `COORDINATOR_NOT_AVAILABLE` when the whole request is misdirected (then `topics` is empty).
 
 ### 5.12 InitProducerId (12)
 
@@ -379,7 +379,7 @@ brokerEpoch     int64    process incarnation (start time in ms)
 host            string   advertised host
 port            int32
 metadataVersion int64    version the broker currently holds, -1 if none
-status          string   JSON, informational only (partition log end, high watermark, segment layout, group lag); see API.md
+status          bytes    UTF-8 JSON, informational only (partition log end, high watermark, segment layout, group lag); see API.md. `bytes`, not `string`, because it can exceed 32 KiB.
 ```
 Response:
 ```
