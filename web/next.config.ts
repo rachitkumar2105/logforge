@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "node:path";
 
 // Security headers that do not depend on the request. The Content-Security-Policy needs a
 // per-request nonce, so it is set in src/middleware.ts.
@@ -18,6 +19,8 @@ const nextConfig: NextConfig = {
   // S17: never ship browser source maps.
   productionBrowserSourceMaps: false,
   poweredByHeader: false,
+  // The site is its own workspace; a lockfile further up the disk is not its root.
+  outputFileTracingRoot: path.resolve(__dirname),
   reactStrictMode: true,
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];

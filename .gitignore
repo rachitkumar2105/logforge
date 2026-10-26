@@ -47,3 +47,4 @@ dependency-check-report.*
 
 # Chaos scratch (ack logs)
 chaos/work/
+next-env.d.ts
