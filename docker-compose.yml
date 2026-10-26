@@ -26,6 +26,8 @@ x-broker: &broker
     LOGFORGE_HEARTBEAT_MS: "250"
     LOGFORGE_SESSION_TIMEOUT_MS: "3000"
     LOGFORGE_REPLICA_LAG_MS: "10000"
+    # Optional JVM flags (the benchmark pins the heap to 1 GiB, the same as its Kafka baseline).
+    JAVA_TOOL_OPTIONS: ${LOGFORGE_JAVA_OPTS:-}
 
 services:
   controller:

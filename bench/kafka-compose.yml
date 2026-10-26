@@ -16,23 +16,29 @@ x-kafka: &kafka
     KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
     KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     KAFKA_HEAP_OPTS: "-Xms512m -Xmx1g"
+    # Data on a named volume, like LogForge's brokers. Without this Kafka writes into the
+    # container's overlay filesystem, which is slower and would make the comparison unfair.
+    KAFKA_LOG_DIRS: /var/lib/kafka/data
     CLUSTER_ID: "lf-bench-kafka-000001"
 
 services:
   kafka1:
     <<: *kafka
+    volumes: [kafka1-data:/var/lib/kafka]
     environment:
       <<: *kafka-env
       KAFKA_NODE_ID: "1"
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka1:9092
   kafka2:
     <<: *kafka
+    volumes: [kafka2-data:/var/lib/kafka]
     environment:
       <<: *kafka-env
       KAFKA_NODE_ID: "2"
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka2:9092
   kafka3:
     <<: *kafka
+    volumes: [kafka3-data:/var/lib/kafka]
     environment:
       <<: *kafka-env
       KAFKA_NODE_ID: "3"
@@ -41,3 +47,8 @@ services:
 networks:
   kafka:
     internal: true
+
+volumes:
+  kafka1-data:
+  kafka2-data:
+  kafka3-data:

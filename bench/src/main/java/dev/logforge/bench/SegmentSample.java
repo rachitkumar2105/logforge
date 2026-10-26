@@ -34,6 +34,7 @@ final class SegmentSample {
             .withFsync(new FsyncPolicy.Never());
     Random rnd = new Random(2026);
     List<Object> segments = new ArrayList<>();
+    List<LogSegmentInfo> infos;
     try (Log log = Log.open(dir, config)) {
       long ts = 1_761_436_800_000L;
       for (int i = 0; i < 260; i++) {
@@ -48,7 +49,10 @@ final class SegmentSample {
         ts += 37;
       }
       log.flush();
-      List<LogSegmentInfo> infos = log.segmentInfos();
+      infos = log.segmentInfos();
+    }
+    // Reopen each segment read-only after the log is closed (one mapping per file at a time).
+    {
       for (LogSegmentInfo info : infos) {
         LogSegment seg =
             info.active()

@@ -48,7 +48,7 @@ if [[ " $SYSTEMS " == *" logforge "* ]]; then
 for policy in never ms:1000 records:1; do
   echo "== LogForge, fsync=$policy"
   docker compose down -v >/dev/null 2>&1 || true
-  LOGFORGE_FSYNC="$policy" docker compose up -d >/dev/null
+  LOGFORGE_FSYNC="$policy" LOGFORGE_JAVA_OPTS="-Xms512m -Xmx1g" docker compose up -d >/dev/null
   wait_healthy
   if [ "$policy" = "never" ]; then
     bench logforge_cluster "$LF_BOOT" --system logforge --suite core --fsync never
