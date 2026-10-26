@@ -243,6 +243,7 @@ topics [
 ```
 Semantics:
 - Records are whole batches. The first batch may start before `fetchOffset`; the client skips records with `offset < fetchOffset`.
+- The broker caps the records in one response at 8 MiB regardless of `maxBytes` and `partitionMaxBytes` (a single batch larger than the remaining budget is still returned whole, so progress is always possible).
 - Consumers (`replicaId = -1`) never receive a batch whose offsets reach the high watermark or beyond.
 - Followers receive data up to the leader's log end. The leader treats `fetchOffset` as the follower's log end offset, which drives the high watermark and the ISR.
 - `currentLeaderEpoch` older than the leader's gives `FENCED_LEADER_EPOCH`; newer gives `UNKNOWN_LEADER_EPOCH`.

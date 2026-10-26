@@ -55,6 +55,13 @@ public final class ReplicaManager implements Closeable {
   /** Upper bound on how long a client may park a request (acks=all timeout, fetch maxWaitMs). */
   static final long MAX_PARK_MS = 30_000;
 
+  /**
+   * Upper bound on the record bytes one fetch response carries, whatever the client asks for. A
+   * read allocates a buffer this large at most, so a request with maxBytes = 2^31 cannot make the
+   * broker allocate a whole segment (SECURITY.md S4).
+   */
+  static final int MAX_FETCH_BYTES = 8 * 1024 * 1024;
+
   private final LongAdder messagesIn = new LongAdder();
   private final LongAdder bytesIn = new LongAdder();
   private final LongAdder bytesOut = new LongAdder();
@@ -457,7 +464,7 @@ public final class ReplicaManager implements Closeable {
 
   private Fetch.Response readAll(Fetch.Request request) {
     List<Fetch.TopicResult> topics = new ArrayList<>();
-    int budget = Math.max(1, request.maxBytes());
+    int budget = Math.max(1, Math.min(request.maxBytes(), MAX_FETCH_BYTES));
     boolean anyData = false;
     for (Fetch.TopicData t : request.topics()) {
       List<Fetch.PartitionResult> parts = new ArrayList<>();
@@ -487,7 +494,7 @@ public final class ReplicaManager implements Closeable {
                   ByteBuffer.allocate(0)));
           continue;
         }
-        int max = Math.max(1, Math.min(pd.partitionMaxBytes(), budget));
+        int max = Math.max(1, Math.min(Math.min(pd.partitionMaxBytes(), MAX_FETCH_BYTES), budget));
         Partition.ReadResult rr =
             p.read(request.replicaId(), pd.currentLeaderEpoch(), pd.fetchOffset(), max);
         budget -= rr.records().remaining();

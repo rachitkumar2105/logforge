@@ -1,0 +1,84 @@
+# LogForge: one controller and three brokers.
+#
+# Network model (SECURITY.md):
+#   - `cluster` is an internal network (no route out, no published ports). All binary-protocol
+#     traffic (clients, replication, controller heartbeats) stays on it.
+#   - Only the controller's admin HTTP API is published, and only on the host's loopback
+#     interface. In a hosted deployment TLS terminates at the platform edge in front of it.
+#
+# Tokens come from .env (gitignored); copy .env.example and fill it. Compose refuses to start
+# if they are missing.
+
+x-broker: &broker
+  build: .
+  image: logforge:local
+  restart: unless-stopped
+  networks: [cluster]
+  depends_on: [controller]
+  environment: &broker-env
+    LOGFORGE_ROLES: broker
+    LOGFORGE_LISTEN: 0.0.0.0:9092
+    LOGFORGE_CONTROLLER: controller:9092
+    LOGFORGE_ADMIN_LISTEN: 0.0.0.0:8080
+    LOGFORGE_ADMIN_TOKEN: ${LOGFORGE_ADMIN_TOKEN:?set LOGFORGE_ADMIN_TOKEN in .env}
+    LOGFORGE_READ_TOKEN: ${LOGFORGE_READ_TOKEN:?set LOGFORGE_READ_TOKEN in .env}
+    LOGFORGE_FSYNC: ${LOGFORGE_FSYNC:-ms:1000}
+    LOGFORGE_HEARTBEAT_MS: "250"
+    LOGFORGE_SESSION_TIMEOUT_MS: "3000"
+    LOGFORGE_REPLICA_LAG_MS: "10000"
+
+services:
+  controller:
+    build: .
+    image: logforge:local
+    restart: unless-stopped
+    networks: [cluster, edge]
+    ports:
+      - "127.0.0.1:8080:8080" # admin API only; never the binary port
+    volumes: [controller-data:/data]
+    environment:
+      LOGFORGE_NODE_ID: "0"
+      LOGFORGE_ROLES: controller
+      LOGFORGE_LISTEN: 0.0.0.0:9092
+      LOGFORGE_ADVERTISED: controller:9092
+      LOGFORGE_ADMIN_LISTEN: 0.0.0.0:8080
+      LOGFORGE_ADMIN_TOKEN: ${LOGFORGE_ADMIN_TOKEN:?set LOGFORGE_ADMIN_TOKEN in .env}
+      LOGFORGE_READ_TOKEN: ${LOGFORGE_READ_TOKEN:?set LOGFORGE_READ_TOKEN in .env}
+      LOGFORGE_CORS_ORIGINS: ${LOGFORGE_CORS_ORIGINS:-http://localhost:3000}
+      LOGFORGE_UNCLEAN_ELECTION: "false"
+      LOGFORGE_SESSION_TIMEOUT_MS: "3000"
+
+  broker1:
+    <<: *broker
+    volumes: [broker1-data:/data]
+    environment:
+      <<: *broker-env
+      LOGFORGE_NODE_ID: "1"
+      LOGFORGE_ADVERTISED: broker1:9092
+
+  broker2:
+    <<: *broker
+    volumes: [broker2-data:/data]
+    environment:
+      <<: *broker-env
+      LOGFORGE_NODE_ID: "2"
+      LOGFORGE_ADVERTISED: broker2:9092
+
+  broker3:
+    <<: *broker
+    volumes: [broker3-data:/data]
+    environment:
+      <<: *broker-env
+      LOGFORGE_NODE_ID: "3"
+      LOGFORGE_ADVERTISED: broker3:9092
+
+networks:
+  cluster:
+    internal: true
+  edge: {}
+
+volumes:
+  controller-data:
+  broker1-data:
+  broker2-data:
+  broker3-data:

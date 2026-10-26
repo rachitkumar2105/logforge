@@ -1,0 +1,12 @@
+.git
+**/target
+web
+chaos/results
+bench/results
+.env
+.env.*
+*.log
+*.index
+data
+logs
+.claude
