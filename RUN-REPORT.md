@@ -85,3 +85,37 @@ Built: `NioServer` (1 acceptor, N IO threads with own selectors, length-prefixed
 ### Not verified / assumed
 - `./mvnw verify` fails the coverage gate for now: `dev.logforge.replication` is at 0.64 line coverage (log package passes). The follower, ISR shrink/expand and election paths are exercised by Phase 4's multi-broker tests.
 - Backpressure is shown by the slow-client test (muted count >= 1 and a fast client unaffected); maximum broker memory under many slow clients was not measured.
+
+---
+
+## Phase 4: Replication and ISR
+
+Built: `ReplicaFetcher`/`ReplicaFetcherManager` (followers pull; OffsetForLeaderEpoch truncation before fetching), controller elections (from the live ISR on broker death or restart; offline partitions keep their last ISR; unclean election only behind `LOGFORGE_UNCLEAN_ELECTION=true`), ISR shrink by lag time and expand at HW and epoch start offset, AlterIsr round trip.
+
+### Verified
+- `ReplicationTest` (in-process, 1 controller + 3 brokers), 8/8, and 3 further consecutive runs 8/8: followers pull and HW advances; consumers see only records below HW; leader halt elects an ISR member with all 100 acked records; paused follower leaves the ISR while acks=all keeps completing, then rejoins; acks=1 loss measured (`acks=1 leader kill: 3 of 3 acknowledged records lost`); the returning old leader truncates its divergent tail and matches the new leader; unclean election off by default (partition offline) and, when enabled, elects an out-of-sync replica and loses the acked record; stale and future epochs fenced.
+- **Gate, zero acknowledged-record loss at acks=all across 10 leader-kill cycles** (`LeaderKillGateTest`: 4 JVM processes, rf=3, min.insync.replicas=2, idempotent producer, leader killed with `destroyForcibly`, restarted, ISR waited back to 3 each cycle):
+  - Windows (TerminateProcess): `GATE leader-kill: cycles=10 acked=1388601 failedSends=0 consumed=1388601 missingAcked=0 duplicates=0`; after the review fixes: `acked=1544001 ... missingAcked=0 duplicates=0`.
+  - Linux (Docker `maven:3.9-eclipse-temurin-21`, real SIGKILL): `GATE leader-kill: cycles=10 acked=1428201 failedSends=0 consumed=1428201 missingAcked=0 duplicates=0`. Election time per cycle 1963 to 2145 ms (session timeout 2000 ms), ISR whole again 2681 to 3051 ms.
+- `FollowerPauseProcessTest` on Linux (real SIGSTOP/SIGCONT): `SIGSTOP follower 2: 50 acks=all writes completed in 2610 ms, ISR now [1, 3]` then `SIGCONT follower 2: back in ISR after 106 ms`.
+- Phase 2 gate re-run on Linux with real SIGKILL, 10 consecutive runs (`mvn -pl broker surefire:test -Dtest=LogCrashRecoveryTest` x10 in Docker):
+  ```
+  linux run 1: SIGKILL recovery: 10 cycles, 1 torn tails truncated (49546 bytes), last ack 544319
+  linux run 2: SIGKILL recovery: 10 cycles, 2 torn tails truncated (89187 bytes), last ack 417087
+  linux run 3: SIGKILL recovery: 10 cycles, 1 torn tails truncated (36101 bytes), last ack 284543
+  linux run 4: SIGKILL recovery: 10 cycles, 1 torn tails truncated (56196 bytes), last ack 356351
+  linux run 5: SIGKILL recovery: 10 cycles, 1 torn tails truncated (50973 bytes), last ack 281983
+  linux run 6: SIGKILL recovery: 10 cycles, 0 torn tails truncated (0 bytes), last ack 201855
+  linux run 7: SIGKILL recovery: 10 cycles, 1 torn tails truncated (58148 bytes), last ack 312191
+  linux run 8: SIGKILL recovery: 10 cycles, 1 torn tails truncated (55830 bytes), last ack 371199
+  linux run 9: SIGKILL recovery: 10 cycles, 2 torn tails truncated (126037 bytes), last ack 239103
+  linux run 10: SIGKILL recovery: 10 cycles, 0 torn tails truncated (0 bytes), last ack 266239
+  ```
+  100 kills; 11 landed inside a write and left a torn tail; every one was truncated and every acknowledged record survived.
+- `./mvnw -B -ntp verify`: BUILD SUCCESS, 66 broker tests, `All coverage checks have been met.` Line coverage (`broker/target/site/jacoco/jacoco.csv`): `dev.logforge.log` 0.847, `dev.logforge.replication` 0.886, controller 0.879, network 0.871.
+- Code review on the Phase 4 commit: 6 findings, 4 fixed (ISR expansion also requires the leader epoch start offset; live broker for InitProducerId; fetch state updated in place; offset gaps re-validated), 2 accepted as test-hook limitations (DECISIONS.md B19).
+
+### Not verified / assumed
+- In-process `halt()` closes files cleanly and `freeze()` keeps serving requests; those tests check replication logic, not crash recovery. Crash claims rest on the process-level tests above.
+- Election time is dominated by the configured session timeout; not tuned further.
+- `FollowerPauseProcessTest` is skipped on Windows (no POSIX signals) and was run on Linux only.
