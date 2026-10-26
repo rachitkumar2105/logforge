@@ -19,6 +19,21 @@ public final class Main {
       return;
     }
     Node node = Node.start(config);
+    if (config.seed != null && config.isBroker() && config.isController()) {
+      Seeder.Spec spec = config.seed;
+      Thread seeder =
+          new Thread(
+              () -> {
+                try {
+                  Seeder.seed("127.0.0.1", node.port(), spec);
+                } catch (Exception e) {
+                  LOG.error("seeding failed", e);
+                }
+              },
+              "logforge-seeder");
+      seeder.setDaemon(true);
+      seeder.start();
+    }
     CountDownLatch stopped = new CountDownLatch(1);
     Runtime.getRuntime()
         .addShutdownHook(

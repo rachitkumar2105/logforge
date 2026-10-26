@@ -52,8 +52,12 @@ public final class NodeConfig {
   public final long compactionIntervalMs;
   public final String clusterId;
 
+  /** Sample topic to write at startup (hosted demo), or null. */
+  public final Seeder.Spec seed;
+
   private NodeConfig(Builder b) {
     this.nodeId = b.nodeId;
+    this.seed = b.seed;
     this.roles = EnumSet.copyOf(b.roles);
     this.listenHost = b.listenHost;
     this.listenPort = b.listenPort;
@@ -142,7 +146,14 @@ public final class NodeConfig {
         dataDir != null
             ? Path.of(dataDir)
             : Path.of(System.getProperty("user.home"), "logforge-data", "node-" + id.trim()));
-    String admin = env.getOrDefault("LOGFORGE_ADMIN_LISTEN", "0.0.0.0:8080");
+    // Platforms such as Render hand a web service its one public port in PORT.
+    String platformPort = env.get("PORT");
+    String admin =
+        env.getOrDefault(
+            "LOGFORGE_ADMIN_LISTEN",
+            platformPort != null && !platformPort.isBlank()
+                ? "0.0.0.0:" + platformPort.trim()
+                : "0.0.0.0:8080");
     if (admin.equalsIgnoreCase("off")) {
       b.adminListen(null);
     } else {
@@ -186,6 +197,10 @@ public final class NodeConfig {
     if (env.containsKey("LOGFORGE_CLUSTER_ID")) {
       b.clusterId(env.get("LOGFORGE_CLUSTER_ID"));
     }
+    String seed = env.get("LOGFORGE_SEED_TOPIC");
+    if (seed != null && !seed.isBlank()) {
+      b.seed(Seeder.Spec.parse(seed.trim()));
+    }
     return b.build();
   }
 
@@ -227,6 +242,7 @@ public final class NodeConfig {
     private LogConfig defaultLogConfig = LogConfig.defaults();
     private int offsetsTopicPartitions = 3;
     private int offsetsTopicReplicationFactor = 3;
+    private Seeder.Spec seed;
     private long retentionCheckIntervalMs = 30_000;
     private long compactionIntervalMs = 15_000;
     private String clusterId = "logforge";
@@ -356,6 +372,11 @@ public final class NodeConfig {
 
     public Builder offsetsTopicPartitions(int v) {
       offsetsTopicPartitions = v;
+      return this;
+    }
+
+    public Builder seed(Seeder.Spec v) {
+      seed = v;
       return this;
     }
 

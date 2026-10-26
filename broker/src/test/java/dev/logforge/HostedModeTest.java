@@ -40,7 +40,8 @@ class HostedModeTest {
 
   @Test
   void anExplicitAdminListenWinsOverThePlatformPort() {
-    NodeConfig c = NodeConfig.fromEnv(env("PORT", "10000", "LOGFORGE_ADMIN_LISTEN", "0.0.0.0:8081"));
+    NodeConfig c =
+        NodeConfig.fromEnv(env("PORT", "10000", "LOGFORGE_ADMIN_LISTEN", "0.0.0.0:8081"));
     assertThat(c.adminPort).isEqualTo(8081);
   }
 
