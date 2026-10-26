@@ -25,7 +25,7 @@ One node cannot show replication, ISR changes, leader election or failover. Thos
 
 ## Run it
 
-Prerequisites: JDK 21+, Docker with Compose, Node 22+ and pnpm 9 for the site.
+Prerequisites: JDK 21+, Docker with Compose, Node 22.18+ (it runs the TypeScript site tests directly) and pnpm 9 for the site.
 
 ```bash
 ./mvnw -B -ntp verify

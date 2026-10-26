@@ -29,7 +29,6 @@ jobs:
           path: broker/target/site/jacoco/
 
   web:
-    if: hashFiles('web/package.json') != ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -37,15 +36,18 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v4
+      # pnpm's version comes from packageManager in web/package.json.
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          package_json_file: web/package.json
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm audit
       - run: pnpm build
