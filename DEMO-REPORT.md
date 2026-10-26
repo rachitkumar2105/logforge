@@ -61,11 +61,18 @@ Every visible text node's colour against its composited background, WCAG thresho
 
 `/`, `/privacy`, `/terms` and a missing page, in dark and light, with and without reduced motion (16 loads): no errors or warnings on any real page. The missing page logs only the browser's own "status of 404" line for the document. Two problems found and fixed on the way: static `/privacy` and `/terms` had all 17 scripts blocked by the CSP nonce (`c36354c`), and Next.js's default 404 page used an inline style without a nonce (custom `not-found.tsx`).
 
+### Production (https://logforge-five.vercel.app, 2026-10-27)
+
+- Broker live: checking 1,202 ms, live 2,631, live view 3,170, pill faded 4,642; layout shift 0.0000; polls every 5 s.
+- Render service suspended: every section painted with the recorded snapshot; checking 2,275, waking 5,191, asleep 93,185 ([waking](docs/demo/prod-suspended-waking-1440.jpg), [asleep](docs/demo/prod-suspended-asleep-1440.jpg)); layout shift 0.0016; console clean.
+- Console sweep of all pages, both schemes, with and without reduced motion: clean (404 page logs only its own status).
+- Lighthouse mobile (PageSpeed Insights, 02:36): Performance 98, Accessibility 100, Best Practices 100, SEO 100.
+- Correction: the local contrast scan above skipped text under full opacity. Lighthouse found pending replay events at 40% opacity below 4.5:1; they are now muted by colour, and an opacity-aware rescan of production found 0 of 326 below threshold in each scheme.
+
 ## Not verified / assumed
 
-- **Lighthouse** has not been run: it is not installed here and was not added. It will be run through PageSpeed Insights (Lighthouse, mobile) against the production URL once deployed.
 - Only Chromium. Safari and Firefox were not checked.
 - Headless screenshots, not a physical phone. Touch behaviour and real mobile performance are not verified.
-- Timings above come from a simulated host. Render's real wake time is only known after deploy.
+- Render's real cold start after 15 idle minutes was not timed; suspension and resume were.
 - The light-scheme state screenshots predate two copy changes (hero note, the "one-minute moving average" label); layout is unchanged.
 - The web-design-guidelines and animation reviews named in the Phase 9 gate are not part of this report yet.
