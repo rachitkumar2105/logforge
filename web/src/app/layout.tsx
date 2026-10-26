@@ -6,6 +6,10 @@ import "./globals.css";
 const sans = Geist({ subsets: ["latin"], variable: "--font-geist-sans", display: "swap" });
 const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono", display: "swap" });
 
+// Every page is rendered per request: the CSP in middleware.ts allows only scripts carrying that
+// request's nonce, which a page prerendered at build time could never have.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "LogForge: a distributed commit log, built from first principles",
   description:
