@@ -38,7 +38,10 @@ public final class RateLimiter {
   public long acquire(String key) {
     long now = nanoClock.getAsLong();
     if (buckets.size() > 100_000) {
-      buckets.clear(); // bounded memory under a flood of distinct keys
+      // Bounded memory under a flood of distinct keys: drop only buckets idle long enough to be
+      // full again, so a flood cannot reset the limit of a client that is still sending.
+      long idleNanos = (long) (burst / ratePerSecond * 1e9);
+      buckets.values().removeIf(b -> now - b.lastNanos > idleNanos);
     }
     Bucket b = buckets.computeIfAbsent(key, k -> new Bucket(burst, now));
     synchronized (b) {
