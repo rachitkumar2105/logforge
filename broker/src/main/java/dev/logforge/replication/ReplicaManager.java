@@ -50,6 +50,7 @@ public final class ReplicaManager implements Closeable {
   private final Map<TopicPartition, Partition> partitions = new ConcurrentHashMap<>();
   private volatile FetcherControl fetchers = FetcherControl.NONE;
   private volatile long appliedMetadataVersion = -1;
+  private volatile String storageFailure;
   private final Set<TopicPartition> strayReported = ConcurrentHashMap.newKeySet();
 
   /** Upper bound on how long a client may park a request (acks=all timeout, fetch maxWaitMs). */
@@ -127,6 +128,24 @@ public final class ReplicaManager implements Closeable {
 
   public long appliedMetadataVersion() {
     return appliedMetadataVersion;
+  }
+
+  /**
+   * Records that this broker's disk failed (for example, full). The broker reports it to the
+   * controller, which fences the broker so leadership moves to replicas that can still write, the
+   * same way Kafka takes a failed log directory offline. Cleared only by a restart.
+   */
+  public void markStorageFailed(String reason) {
+    if (storageFailure == null) {
+      storageFailure = reason;
+      LOG.error(
+          "storage failed; asking the controller to fence this broker", null, "reason", reason);
+    }
+  }
+
+  /** The storage failure reason, or null if storage is healthy. */
+  public String storageFailure() {
+    return storageFailure;
   }
 
   public long messagesIn() {
@@ -326,6 +345,7 @@ public final class ReplicaManager implements Closeable {
       return failed(tp, Errors.INVALID_PRODUCER_EPOCH);
     } catch (LogStorageException e) {
       LOG.error("append failed", e, "partition", tp.toString());
+      markStorageFailed(e.getMessage());
       return failed(tp, Errors.STORAGE_ERROR);
     }
   }

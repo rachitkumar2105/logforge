@@ -105,6 +105,10 @@ public final class Controller {
         onBrokersDied(List.of(b.id));
       }
       b.epoch = req.brokerEpoch();
+      if (b.fenced) {
+        b.fenced = false; // a restart clears a storage fence; it re-fences if the disk is still bad
+        LOG.info("broker unfenced after restart", "broker", b.id);
+      }
       changed = true;
     }
     if (!b.alive) {
@@ -123,6 +127,12 @@ public final class Controller {
       byte[] bytes = new byte[s.remaining()];
       s.get(bytes);
       b.status = new String(bytes, UTF_8);
+      if (!b.fenced && b.status.contains("\"storageFailed\":true")) {
+        b.fenced = true;
+        LOG.warn("broker fenced: storage failure", "broker", b.id);
+        onBrokersDied(List.of(b.id));
+        changed = true;
+      }
     }
     if (changed) {
       onBrokerChange(b.id);

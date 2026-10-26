@@ -340,7 +340,12 @@ final class ReplicaFetcher extends Thread {
                 s.needsTruncation = true;
                 break;
               }
-              p.appendAsFollower(b);
+              try {
+                p.appendAsFollower(b);
+              } catch (dev.logforge.log.LogStorageException e) {
+                replicaManager.markStorageFailed(e.getMessage());
+                throw e;
+              }
             }
             p.updateFollowerHighWatermark(r.highWatermark());
           }

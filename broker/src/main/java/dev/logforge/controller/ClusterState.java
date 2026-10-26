@@ -33,6 +33,14 @@ final class ClusterState {
     long epoch;
     long lastHeartbeatMs;
     boolean alive;
+
+    /** Reported a storage failure: not eligible for leadership until it restarts. */
+    boolean fenced;
+
+    boolean usable() {
+      return alive && !fenced;
+    }
+
     String status = "{}";
 
     BrokerRegistration(int id) {
@@ -167,7 +175,7 @@ final class ClusterState {
     List<Integer> ids = new ArrayList<>();
     brokers.forEach(
         (id, b) -> {
-          if (b.alive) {
+          if (b.usable()) {
             ids.add(id);
           }
         });
@@ -176,13 +184,13 @@ final class ClusterState {
 
   boolean isAlive(int id) {
     BrokerRegistration b = brokers.get(id);
-    return b != null && b.alive;
+    return b != null && b.usable();
   }
 
   ControllerApis.Snapshot snapshot(int controllerId, String controllerHost, int controllerPort) {
     List<ControllerApis.BrokerInfo> bs = new ArrayList<>();
     for (BrokerRegistration b : brokers.values()) {
-      bs.add(new ControllerApis.BrokerInfo(b.id, b.host, b.port, b.alive));
+      bs.add(new ControllerApis.BrokerInfo(b.id, b.host, b.port, b.usable()));
     }
     if (!brokers.containsKey(controllerId) && controllerHost != null) {
       bs.add(new ControllerApis.BrokerInfo(controllerId, controllerHost, controllerPort, true));

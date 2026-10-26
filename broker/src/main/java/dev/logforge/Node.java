@@ -282,7 +282,7 @@ public final class Node implements AutoCloseable {
     }
     long now = System.currentTimeMillis();
     ByteBuffer status = null;
-    if (now - lastStatusSentMs >= 1_000) {
+    if (now - lastStatusSentMs >= 1_000 || replicaManager.storageFailure() != null) {
       status = ByteBuffer.wrap(Json.write(statusJson()).getBytes(UTF_8));
       lastStatusSentMs = now;
     }
@@ -339,6 +339,7 @@ public final class Node implements AutoCloseable {
   public Map<String, Object> statusJson() {
     return Json.obj(
         "nodeId", config.nodeId,
+        "storageFailed", replicaManager != null && replicaManager.storageFailure() != null,
         "partitions", replicaManager == null ? List.of() : replicaManager.status(),
         "messagesIn", replicaManager == null ? 0 : replicaManager.messagesIn(),
         "bytesIn", replicaManager == null ? 0 : replicaManager.bytesIn(),
