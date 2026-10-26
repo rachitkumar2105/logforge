@@ -4,7 +4,7 @@ import java.util.regex.Pattern;
 
 /** A partition of a topic. Its directory on disk is {@code <topic>-<partition>}. */
 public record TopicPartition(String topic, int partition) implements Comparable<TopicPartition> {
-  private static final Pattern VALID_TOPIC = Pattern.compile("[A-Za-z0-9._]{1,200}");
+  private static final Pattern VALID_TOPIC = Pattern.compile("[A-Za-z0-9._-]{1,200}");
 
   public static final String OFFSETS_TOPIC = "__consumer_offsets";
 

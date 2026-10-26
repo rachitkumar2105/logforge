@@ -56,3 +56,32 @@ Built: git repo, `.gitignore`, `.gitattributes`, Maven wrapper (Maven 3.9.11), m
 ### Not verified / assumed
 - These runs were on Windows (`TerminateProcess`). No kill landed inside a write there (0 torn tails), so torn-tail truncation is proven only by the deterministic truncation tests. The same test still needs a run on Linux (real `SIGKILL`, where a kill can interrupt a multi-page write).
 - Fixed during Phase 2: on Windows, resizing a sealed segment's index on reopen failed with "user-mapped section open". Sealed indexes are now mapped at their existing size, and resizes retry briefly.
+
+---
+
+## Phase 3: Network layer and single-broker produce and fetch
+
+Built: `NioServer` (1 acceptor, N IO threads with own selectors, length-prefixed frames checked before allocation, per-connection in-order pipelining, backpressure by muting reads), `BrokerApis` dispatch, `ReplicaManager`/`Partition`/`IsrManager`/`DelayedOperations` (acks 0/1/all, long-poll fetch), `Controller` (registration by heartbeat, topic create/delete, AlterIsr validation, atomic `metadata.json`), `Node`, `Main`; Java `Producer` (batching, linger, retries, idempotence, bounded buffer), `Consumer` (manual assignment, parallel long-poll per leader), `Admin`.
+
+### Verified
+- Broker tests, `./mvnw -B -ntp test -pl broker,client -Dtest=NioServerTest,SingleBrokerTest,ThirdPartyProtocolTest,PartitionerTest,EndToEndTest,MillionRecordsTest`:
+  ```
+  Tests run: 4, Failures: 0 -- NioServerTest      (pipelining 50 requests in order; 5 malformed frame kinds each close only their
+                                                   connection; slow reader muted while another client stays under 5 s; bad version)
+  Tests run: 8, Failures: 0 -- SingleBrokerTest   (acks 0/1/all, long poll, typed errors, list offsets, restart, delete)
+  Tests run: 1, Failures: 0 -- ThirdPartyProtocolTest (client written only from PROTOCOL.md: Produce and Fetch by hand)
+  Tests run: 3, Failures: 0 -- EndToEndTest       (real socket produce then consume; same key same partition; acks all/none)
+  Tests run: 3, Failures: 0 -- PartitionerTest
+  ```
+- **Gate, 1 million records at acks=1, zero loss, zero duplicates** (`MillionRecordsTest`, 4 partitions, 100-byte values, batch 64 KB, linger 5 ms, rf 1, fsync never, in-process broker on the laptop):
+  ```
+  GATE 1M: produced 1000000 in 1753 ms, consumed 1000000 in 923 ms, distinct=1000000, duplicates=0
+  ```
+  These timings are test-harness timings in one JVM (producer, broker and consumer share the process), not benchmark results; Phase 8 produces the benchmark numbers.
+- Partitioner matches Kafka's murmur2 on 20,000 random keys (`bench/Murmur2CompatibilityTest`, against `org.apache.kafka.common.utils.Utils.murmur2`).
+- Phase 0 gate evidence: `ThirdPartyProtocolTest` encodes a record batch, CRC, framing and Produce/Fetch purely from `PROTOCOL.md` and round-trips through a real broker.
+- Code review (built-in, high effort) on the Phase 3 diff: 9 findings, 8 fixed (stray-directory deletion could wipe data, heartbeat starving the scheduler, controller-call backlog, unbounded client wait times, executor stuck on `Error`, fetch budget overrun, consumer channel address change, admin polling), 1 accepted in `DECISIONS.md` B18.
+
+### Not verified / assumed
+- `./mvnw verify` fails the coverage gate for now: `dev.logforge.replication` is at 0.64 line coverage (log package passes). The follower, ISR shrink/expand and election paths are exercised by Phase 4's multi-broker tests.
+- Backpressure is shown by the slow-client test (muted count >= 1 and a fast client unaffected); maximum broker memory under many slow clients was not measured.

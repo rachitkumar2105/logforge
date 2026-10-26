@@ -136,7 +136,7 @@ Response: int32 size | int32 correlationId | body
 | 11 | `TOPIC_ALREADY_EXISTS` | | |
 | 12 | `INVALID_REPLICATION_FACTOR` | | More replicas requested than live brokers, or < 1. |
 | 13 | `INVALID_PARTITIONS` | | Partition count < 1 or > 1024. |
-| 14 | `INVALID_TOPIC` | | Name not matching `[A-Za-z0-9._]{1,200}` or starting with `__` from a client. |
+| 14 | `INVALID_TOPIC` | | Name not matching `[A-Za-z0-9._-]{1,200}` or starting with `__` from a client. |
 | 15 | `COORDINATOR_NOT_AVAILABLE` | yes | Offsets partition has no leader or is still loading. |
 | 16 | `NOT_COORDINATOR` | yes | Group request sent to the wrong broker; call FindCoordinator again. |
 | 17 | `ILLEGAL_GENERATION` | | Member's generation is stale; rejoin. |
