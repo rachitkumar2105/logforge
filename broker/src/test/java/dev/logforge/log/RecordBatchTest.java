@@ -64,9 +64,7 @@ class RecordBatchTest {
     String key = "ключ-鍵-🔑";
     String value = "значение — 価値 — ✓ — 𝄞";
     RecordBatch batch =
-        RecordBatch.builder(0L)
-            .append(0L, b(key), b(value), new Header("ヘッダー", b("値")))
-            .build();
+        RecordBatch.builder(0L).append(0L, b(key), b(value), new Header("ヘッダー", b("値"))).build();
 
     Record r = RecordBatch.wrap(ByteBuffer.wrap(toBytes(batch))).records().get(0);
 
@@ -210,7 +208,9 @@ class RecordBatchTest {
 
   @Test
   void rejectsOverlongVarint() {
-    ByteBuffer buf = ByteBuffer.wrap(new byte[] {(byte) 0x80, (byte) 0x80, (byte) 0x80, (byte) 0x80, (byte) 0x80, 0x01});
+    ByteBuffer buf =
+        ByteBuffer.wrap(
+            new byte[] {(byte) 0x80, (byte) 0x80, (byte) 0x80, (byte) 0x80, (byte) 0x80, 0x01});
     assertThatThrownBy(() -> Varint.readVarint(buf)).isInstanceOf(CorruptRecordException.class);
   }
 
@@ -230,8 +230,15 @@ class RecordBatchTest {
     byte[] record = java.util.Arrays.copyOfRange(bytes, 61, 70);
     assertThat(record)
         .containsExactly(
-            (byte) 0x10, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x02, (byte) 0x6B,
-            (byte) 0x02, (byte) 0x76, (byte) 0x00);
+            (byte) 0x10,
+            (byte) 0x00,
+            (byte) 0x00,
+            (byte) 0x00,
+            (byte) 0x02,
+            (byte) 0x6B,
+            (byte) 0x02,
+            (byte) 0x76,
+            (byte) 0x00);
   }
 
   private static int[] encodeVarint(int v) {

@@ -19,7 +19,9 @@ class LogSegmentTest {
 
   private static RecordBatch batch(long offset, String value) {
     RecordBatch b =
-        RecordBatch.builder(offset).append(offset, ("k" + offset).getBytes(UTF_8), value.getBytes(UTF_8)).build();
+        RecordBatch.builder(offset)
+            .append(offset, ("k" + offset).getBytes(UTF_8), value.getBytes(UTF_8))
+            .build();
     b.setBaseOffset(offset);
     b.setPartitionLeaderEpoch(0);
     return b;
