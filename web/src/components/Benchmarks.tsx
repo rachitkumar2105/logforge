@@ -231,7 +231,79 @@ export function Benchmarks({ results, repoUrl }: { results: BenchResult[]; repoU
             </p>
           </div>
         </div>
+        <Reading find={find} />
       </div>
     </section>
+  );
+}
+
+const COMPARED: [string, string][] = [
+  ["size-100B", "100 B records"],
+  ["baseline-1KB", "1 KB, acks=1"],
+  ["size-10KB", "10 KB records"],
+  ["acks-0", "acks=0"],
+  ["acks-all", "acks=all"],
+  ["partitions-1", "1 partition"],
+  ["partitions-16", "16 partitions"],
+  ["fsync-records-1", "fsync every batch"],
+];
+
+/** Kafka's throughput divided by LogForge's for one configuration. */
+function ratio(find: (s: string, l: string) => BenchResult | undefined, label: string): number | undefined {
+  const lf = find("logforge", label)?.results.mbPerSec;
+  const k = find("kafka", label)?.results.mbPerSec;
+  return lf && k ? k / lf : undefined;
+}
+
+function Reading({ find }: { find: (s: string, l: string) => BenchResult | undefined }) {
+  const mb = (s: string, l: string) => fixed(find(s, l)?.results.mbPerSec, 1);
+  const rows = COMPARED.map(([label, name]) => ({ label, name, r: ratio(find, label) })).filter(
+    (x): x is { label: string; name: string; r: number } => x.r !== undefined,
+  );
+  const e2eLf = find("logforge", "e2e-acks-all")?.results.ackToReceiveMs?.p50;
+  const e2eK = find("kafka", "e2e-acks-all")?.results.ackToReceiveMs?.p50;
+  return (
+    <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_20rem]">
+      <div className="max-w-3xl space-y-4 text-sm leading-relaxed">
+        <p className="label">Reading the comparison</p>
+        <p>
+          <strong>Noise first.</strong> The 1 KB baseline and the fsync never run are the same configuration
+          (acks=1, 4 partitions, no forced flush) measured minutes apart. LogForge gave{" "}
+          <span className="mono">{mb("logforge", "baseline-1KB")}</span> and{" "}
+          <span className="mono">{mb("logforge", "fsync-never")}</span> MB/s, Kafka{" "}
+          <span className="mono">{mb("kafka", "baseline-1KB")}</span> and{" "}
+          <span className="mono">{mb("kafka", "fsync-never")}</span> MB/s. On a shared laptop a gap smaller than
+          that spread is not evidence of anything.
+        </p>
+        <p>
+          <strong>Where Kafka pulls ahead</strong> (replicated writes at acks=all, a single partition, large
+          records, and handing acknowledged records to a consumer), the likely causes are known from the code,
+          not from profiling. The LogForge producer keeps one request in flight per partition, where Kafka
+          pipelines up to five per connection. Followers and consumers get bytes copied through the JVM heap,
+          not sent from the page cache with sendfile. And the LogForge consumer waits for every leader&apos;s
+          fetch to return before handing any records over, so one long poll delays the rest: acknowledged
+          records reached the consumer after a median <span className="mono">{ms(e2eLf)}</span> against
+          Kafka&apos;s <span className="mono">{ms(e2eK)}</span>.
+        </p>
+        <p>
+          <strong>Where LogForge is level or ahead</strong>, read it as both clusters waiting on the same single
+          producer and the same machine rather than as a faster broker. Kafka has had a decade of tuning; the
+          point of this table is that the gap is measured and explained, not hidden.
+        </p>
+      </div>
+      <div className="panel self-start p-4">
+        <p className="label mb-3">Kafka MB/s divided by LogForge MB/s</p>
+        <table className="data">
+          <tbody>
+            {rows.map((x) => (
+              <tr key={x.label}>
+                <th scope="row" className="font-normal">{x.name}</th>
+                <td className="num">{fixed(x.r, 2)}&times;</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
