@@ -19,7 +19,8 @@ out/
 *.cleaned
 *.swap
 *.deleted
-data/
+/data/
+!web/src/data/
 logs/
 
 # Node / Next.js
