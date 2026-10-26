@@ -52,6 +52,27 @@ for policy in never ms:1000 records:1; do
   wait_healthy
   if [ "$policy" = "never" ]; then
     bench logforge_cluster "$LF_BOOT" --system logforge --suite core --fsync never
+    # Prove replication kept up: every follower's log end must equal its leader's after the runs.
+    sleep 5
+    set -a; . ./.env; set +a
+    curl -s -H "Authorization: Bearer $LOGFORGE_READ_TOKEN" http://127.0.0.1:8080/api/v1/cluster |
+      python -c "
+import json, sys
+d = json.load(sys.stdin)
+rows = []
+for t in d['topics']:
+    if not t['name'].startswith('bench-'):
+        continue
+    for p in t['partitions']:
+        ends = {r['brokerId']: r['logEndOffset'] for r in p['replicaState']}
+        leader_end = ends.get(p['leader'], -1)
+        rows.append((t['name'], p['partition'], leader_end, min(ends.values()), sorted(p['isr'])))
+lagging = [r for r in rows if r[3] != r[2]]
+print(f'replication check: {len(rows)} partitions, {len(lagging)} with a follower behind its leader')
+for r in rows:
+    print(f'  {r[0]}-{r[1]}: leader end {r[2]}, slowest replica end {r[3]}, isr {r[4]}')
+" > "$RESULTS/replication-check.txt"
+    cat "$RESULTS/replication-check.txt" | head -3
   fi
   bench logforge_cluster "$LF_BOOT" --system logforge --suite fsync --fsync "$policy"
 done

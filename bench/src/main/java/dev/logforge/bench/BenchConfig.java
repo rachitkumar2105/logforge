@@ -39,6 +39,7 @@ record BenchConfig(
     m.put("lingerMs", lingerMs);
     m.put("fsync", fsync);
     m.put("compression", "none");
+    m.put("keys", "1024 distinct keys, murmur2 partitioning (same in both clients)");
     m.put("producerBufferBytes", 8 * 1024 * 1024);
     m.put("idempotentProducer", "all".equals(acks));
     m.put("warmupSeconds", warmupSeconds);

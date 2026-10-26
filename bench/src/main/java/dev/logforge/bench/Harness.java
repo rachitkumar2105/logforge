@@ -34,6 +34,20 @@ final class Harness {
     return p;
   }
 
+  /**
+   * Records are keyed (1,024 keys, cycled). Both clients hash keys with the same murmur2 (bench
+   * Murmur2CompatibilityTest), so every record lands on the same partition in both systems. Keyless
+   * records would not compare like with like: Kafka's sticky partitioner fills one partition at a
+   * time, LogForge's producer spreads keyless records round-robin.
+   */
+  static byte[][] keys() {
+    byte[][] k = new byte[1024][];
+    for (int i = 0; i < k.length; i++) {
+      k[i] = ("key-" + i).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    }
+    return k;
+  }
+
   static Map<String, Object> percentiles(long[] nanos, int n) {
     long[] s = Arrays.copyOf(nanos, n);
     Arrays.sort(s);
@@ -53,6 +67,7 @@ final class Harness {
     String topic = "bench-" + c.label() + "-" + UUID.randomUUID().toString().substring(0, 8);
     sys.createTopic(topic, c.partitions(), c.replicationFactor(), c.topicConfigs());
     byte[][] payloads = payloads(c.recordSize());
+    byte[][] keys = keys();
     long[] latency = new long[4_000_000];
     AtomicInteger samples = new AtomicInteger();
     LongAdder acked = new LongAdder();
@@ -69,7 +84,7 @@ final class Harness {
         }
         boolean measured = sendNanos >= windowStart;
         producer.send(
-            null,
+            keys[(int) (sent & 1023)],
             payloads[(int) (sent & 15)],
             (offset, err) -> {
               long now = System.nanoTime();
@@ -133,6 +148,7 @@ final class Harness {
     reader.start();
     Thread.sleep(2_000); // let the consumer position itself before the first record
     byte[] pad = new byte[Math.max(0, c.recordSize() - 4)];
+    byte[][] keys = keys();
     long intervalNanos = 1_000_000_000L / c.ratePerSec();
     try (SystemUnderTest.AsyncProducer producer = sys.producer(c, topic)) {
       long t0 = System.nanoTime();
@@ -145,7 +161,9 @@ final class Harness {
         int id = i;
         sendAt[i] = System.nanoTime();
         producer.send(
-            null, v.array(), (off, err) -> ackAt[id] = err == null ? System.nanoTime() : -1);
+            keys[i & 1023],
+            v.array(),
+            (off, err) -> ackAt[id] = err == null ? System.nanoTime() : -1);
       }
       producer.flush();
     }
