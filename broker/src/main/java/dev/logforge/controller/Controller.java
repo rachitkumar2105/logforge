@@ -40,6 +40,7 @@ public final class Controller {
   private final long sessionTimeoutMs;
   private final int offsetsPartitions;
   private final int offsetsReplicationFactor;
+  private final boolean uncleanElection;
   private volatile String selfHost;
   private volatile int selfPort;
 
@@ -50,7 +51,8 @@ public final class Controller {
       LongSupplier clock,
       long sessionTimeoutMs,
       int offsetsPartitions,
-      int offsetsReplicationFactor)
+      int offsetsReplicationFactor,
+      boolean uncleanElection)
       throws IOException {
     this.nodeId = nodeId;
     this.state = new ClusterState(clusterId, dir);
@@ -58,6 +60,7 @@ public final class Controller {
     this.sessionTimeoutMs = sessionTimeoutMs;
     this.offsetsPartitions = offsetsPartitions;
     this.offsetsReplicationFactor = offsetsReplicationFactor;
+    this.uncleanElection = uncleanElection;
   }
 
   /** The address clients use to reach the controller (published in metadata). */
@@ -94,6 +97,13 @@ public final class Controller {
           "broker registered", "broker", req.brokerId(), "host", req.host(), "port", req.port());
     }
     if (b.epoch != req.brokerEpoch()) {
+      if (b.alive && b.epoch != 0) {
+        // Restarted faster than the session timeout: treat it as a failure first, so every
+        // partition it led gets a new leader epoch and its old tail is truncated on return.
+        LOG.warn("broker restarted", "broker", b.id);
+        b.alive = false;
+        onBrokersDied(List.of(b.id));
+      }
       b.epoch = req.brokerEpoch();
       changed = true;
     }
@@ -122,8 +132,102 @@ public final class Controller {
     return new ControllerApis.HeartbeatResponse(Errors.NONE.code(), state.version, snapshot);
   }
 
-  /** Hook for leader election when a broker returns (Phase 4). */
-  private void onBrokerChange(int brokerId) {}
+  /**
+   * A broker came (back) to life. Offline partitions whose last ISR includes it get it as leader.
+   * With unclean election enabled, an offline partition takes any live replica.
+   */
+  private void onBrokerChange(int brokerId) {
+    boolean changed = false;
+    for (ClusterState.TopicState t : state.topics.values()) {
+      for (ClusterState.PartitionState p : t.partitions) {
+        if (p.leader >= 0 || !p.replicas.contains(brokerId)) {
+          continue;
+        }
+        changed |= elect(t.name, p);
+      }
+    }
+    if (changed) {
+      commitQuietly();
+    }
+  }
+
+  /**
+   * Picks a leader for {@code p} from its live ISR members, in replica order. If none is alive the
+   * partition goes offline (leader -1) and keeps its last ISR, so that when one of those brokers
+   * returns it is elected and no committed record is lost. Only with unclean election enabled may
+   * an out-of-sync replica be chosen: that replica lacks some committed records, which are then
+   * lost for good (and consumers may see offsets reused with different data).
+   *
+   * @return true if the partition state changed
+   */
+  private boolean elect(String topic, ClusterState.PartitionState p) {
+    List<Integer> liveIsr = new ArrayList<>();
+    for (int r : p.replicas) {
+      if (p.isr.contains(r) && state.isAlive(r)) {
+        liveIsr.add(r);
+      }
+    }
+    int oldLeader = p.leader;
+    if (!liveIsr.isEmpty()) {
+      p.leader = liveIsr.get(0);
+      p.isr = List.copyOf(liveIsr);
+    } else if (uncleanElection) {
+      int chosen = -1;
+      for (int r : p.replicas) {
+        if (state.isAlive(r)) {
+          chosen = r;
+          break;
+        }
+      }
+      if (chosen < 0) {
+        if (oldLeader == -1) {
+          return false;
+        }
+        p.leader = -1;
+      } else {
+        p.leader = chosen;
+        p.isr = List.of(chosen);
+        LOG.warn(
+            "UNCLEAN leader election: committed records may be lost",
+            "topic",
+            topic,
+            "partition",
+            p.partition,
+            "leader",
+            chosen);
+      }
+    } else {
+      if (oldLeader == -1) {
+        return false; // still offline; keep the last ISR
+      }
+      p.leader = -1;
+    }
+    p.leaderEpoch++;
+    p.partitionEpoch++;
+    LOG.info(
+        "leader elected",
+        "topic",
+        topic,
+        "partition",
+        p.partition,
+        "leader",
+        p.leader,
+        "previousLeader",
+        oldLeader,
+        "leaderEpoch",
+        p.leaderEpoch,
+        "isr",
+        p.isr);
+    return true;
+  }
+
+  private void commitQuietly() {
+    try {
+      state.commit();
+    } catch (IOException e) {
+      LOG.error("could not persist metadata", e);
+    }
+  }
 
   /** Marks brokers dead after a missed session. Called periodically. */
   public synchronized void tick() {
@@ -142,8 +246,31 @@ public final class Controller {
     }
   }
 
-  /** Hook for leader election (Phase 4). */
-  private void onBrokersDied(List<Integer> died) {}
+  /**
+   * Brokers stopped heartbeating. Partitions they led get a new leader from the ISR; partitions
+   * where they were in-sync followers drop them from the ISR (so acks=all stops waiting on them).
+   */
+  private void onBrokersDied(List<Integer> died) {
+    boolean changed = false;
+    for (ClusterState.TopicState t : state.topics.values()) {
+      for (ClusterState.PartitionState p : t.partitions) {
+        if (died.contains(p.leader)) {
+          changed |= elect(t.name, p);
+        } else if (p.leader >= 0 && p.isr.stream().anyMatch(died::contains)) {
+          List<Integer> isr = new ArrayList<>(p.isr);
+          isr.removeAll(died);
+          p.isr = List.copyOf(isr);
+          p.partitionEpoch++;
+          changed = true;
+          LOG.info(
+              "ISR shrunk by controller", "topic", t.name, "partition", p.partition, "isr", p.isr);
+        }
+      }
+    }
+    if (changed) {
+      commitQuietly();
+    }
+  }
 
   /** Last status JSON each broker reported, for the admin API. */
   public synchronized Map<Integer, String> brokerStatuses() {

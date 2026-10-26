@@ -164,12 +164,25 @@ final class ClientMetadata implements Closeable {
     return new BlockingChannel(a.host(), a.port(), clientId, requestTimeoutMs);
   }
 
-  /** Any broker, for requests that any broker can answer. */
+  /**
+   * Any broker for requests every broker answers (InitProducerId, FindCoordinator). Prefers a node
+   * other than the controller: a controller-only node serves no broker APIs.
+   */
   BlockingChannel anyChannel() {
     if (brokers.isEmpty()) {
       refresh();
     }
-    return channel(brokers.keySet().iterator().next());
+    int pick = -1;
+    for (int id : brokers.keySet()) {
+      if (id != controllerId) {
+        pick = id;
+        break;
+      }
+    }
+    if (pick < 0) {
+      pick = brokers.keySet().iterator().next();
+    }
+    return channel(pick);
   }
 
   @Override

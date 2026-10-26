@@ -12,10 +12,12 @@ import dev.logforge.network.protocol.Errors;
 import dev.logforge.replication.DelayedOperations;
 import dev.logforge.replication.IsrManager;
 import dev.logforge.replication.Partition;
+import dev.logforge.replication.ReplicaFetcherManager;
 import dev.logforge.replication.ReplicaManager;
 import dev.logforge.util.Json;
 import dev.logforge.util.JsonLog;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.List;
@@ -53,6 +55,10 @@ public final class Node implements AutoCloseable {
   private volatile ControllerApis.Snapshot metadata;
   private volatile long lastStatusSentMs;
   private volatile boolean closed;
+  private volatile boolean halted;
+  private volatile boolean frozen;
+  private volatile boolean replicationPaused;
+  private ReplicaFetcherManager fetchers;
 
   private Node(NodeConfig config) {
     this.config = config;
@@ -82,7 +88,8 @@ public final class Node implements AutoCloseable {
               System::currentTimeMillis,
               config.brokerSessionTimeoutMs,
               config.offsetsTopicPartitions,
-              config.offsetsTopicReplicationFactor);
+              config.offsetsTopicReplicationFactor,
+              config.uncleanLeaderElection);
     }
     if (config.isBroker()) {
       controllerChannel =
@@ -103,6 +110,14 @@ public final class Node implements AutoCloseable {
               new DelayedOperations(),
               alterIsrSender(),
               System::currentTimeMillis);
+      fetchers =
+          new ReplicaFetcherManager(
+              config.nodeId,
+              replicaManager,
+              this::brokerAddress,
+              config.replicaFetchWaitMs,
+              8 * 1024 * 1024);
+      replicaManager.setFetcherControl(fetchers);
     }
     apis = new BrokerApis(controller, replicaManager, () -> metadata, producerIds);
     handlerPool =
@@ -218,7 +233,7 @@ public final class Node implements AutoCloseable {
 
   /** Registers with the controller, reports status, and applies newer metadata. */
   private void heartbeat() {
-    if (closed) {
+    if (closed || frozen) {
       return;
     }
     long now = System.currentTimeMillis();
@@ -325,6 +340,66 @@ public final class Node implements AutoCloseable {
     return p == null ? -1 : p.logEndOffset();
   }
 
+  /** Address of a broker from the latest metadata, for replica fetchers. */
+  private InetSocketAddress brokerAddress(int id) {
+    ControllerApis.Snapshot s = metadata;
+    if (s == null) {
+      return null;
+    }
+    for (ControllerApis.BrokerInfo b : s.brokers()) {
+      if (b.nodeId() == id) {
+        return InetSocketAddress.createUnresolved(b.host(), b.port());
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Test hook: stops the node abruptly, keeping its data directory. In-process this cannot be a
+   * real crash (files are closed so the same JVM can reopen them); real kills are done on separate
+   * processes in LeaderKillGateTest and chaos/.
+   */
+  public void halt() {
+    halted = true;
+    try {
+      close();
+    } catch (IOException e) {
+      LOG.warn("halt: close failed", "error", e.getClass().getSimpleName());
+    }
+  }
+
+  public boolean isHalted() {
+    return halted;
+  }
+
+  /** Test hook modelling SIGSTOP: no heartbeats, no replication, until {@link #unfreeze}. */
+  public void freeze() {
+    frozen = true;
+    applyFetchPause();
+  }
+
+  public void unfreeze() {
+    frozen = false;
+    applyFetchPause();
+  }
+
+  /** Test hook: stop pulling from leaders while staying alive (a slow follower). */
+  public void pauseReplication() {
+    replicationPaused = true;
+    applyFetchPause();
+  }
+
+  public void resumeReplication() {
+    replicationPaused = false;
+    applyFetchPause();
+  }
+
+  private void applyFetchPause() {
+    if (fetchers != null) {
+      fetchers.setPaused(frozen || replicationPaused);
+    }
+  }
+
   public int mutedConnections() {
     return server == null ? 0 : server.mutedConnections();
   }
@@ -340,6 +415,9 @@ public final class Node implements AutoCloseable {
     }
     if (heartbeatThread != null) {
       heartbeatThread.shutdownNow();
+    }
+    if (fetchers != null) {
+      fetchers.close();
     }
     if (server != null) {
       server.close();
