@@ -441,9 +441,42 @@ public final class Log implements Closeable {
     return lock;
   }
 
-  /** Replaces a sealed segment with a compacted copy. Caller holds {@link #lock}. */
-  void replaceSegment(long baseOffset, LogSegment replacement) {
-    segments.put(baseOffset, replacement);
+  /**
+   * Swaps a sealed segment for its compacted copy at {@code cleaned}. Returns the new segment, or
+   * null (leaving everything untouched) if {@code old} is no longer a sealed segment of this log.
+   * The order makes a crash at any point safe: the stale index is deleted before the rename, so a
+   * restart either sees the old log file or the new one, and rebuilds a missing index.
+   */
+  LogSegment swapSegment(LogSegment old, Path cleaned) throws IOException {
+    lock.lock();
+    try {
+      LogSegment current = segments.get(old.baseOffset());
+      if (current != old || current == activeSegment()) {
+        return null;
+      }
+      old.close();
+      Files.deleteIfExists(old.indexFile());
+      Files.move(
+          cleaned,
+          old.logFile(),
+          java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+          java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+      LogSegment fresh = LogSegment.openSealed(dir, old.baseOffset(), config);
+      segments.put(old.baseOffset(), fresh);
+      return fresh;
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  /** Epoch history and producer state come from batch headers, which compaction may remove. */
+  void rebuildDerivedStateAfterCompaction() throws IOException {
+    lock.lock();
+    try {
+      rebuildDerivedState();
+    } finally {
+      lock.unlock();
+    }
   }
 
   public LeaderEpochCache epochCache() {

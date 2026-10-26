@@ -4,6 +4,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 import dev.logforge.controller.Controller;
 import dev.logforge.controller.ControllerChannel;
+import dev.logforge.coordinator.GroupCoordinator;
+import dev.logforge.log.Compactor;
 import dev.logforge.log.LogManager;
 import dev.logforge.log.ProducerIdManager;
 import dev.logforge.network.NioServer;
@@ -59,6 +61,7 @@ public final class Node implements AutoCloseable {
   private volatile boolean frozen;
   private volatile boolean replicationPaused;
   private ReplicaFetcherManager fetchers;
+  private GroupCoordinator groupCoordinator;
 
   private Node(NodeConfig config) {
     this.config = config;
@@ -118,8 +121,18 @@ public final class Node implements AutoCloseable {
               config.replicaFetchWaitMs,
               8 * 1024 * 1024);
       replicaManager.setFetcherControl(fetchers);
+      groupCoordinator =
+          new GroupCoordinator(
+              config.nodeId,
+              replicaManager,
+              () -> metadata,
+              controllerChannel,
+              System::currentTimeMillis);
     }
     apis = new BrokerApis(controller, replicaManager, () -> metadata, producerIds);
+    if (groupCoordinator != null) {
+      apis.setGroupApis(groupCoordinator::handle);
+    }
     handlerPool =
         Executors.newFixedThreadPool(config.handlerThreads, daemonFactory("logforge-handler"));
     server =
@@ -152,6 +165,13 @@ public final class Node implements AutoCloseable {
           TimeUnit.MILLISECONDS);
       scheduler.scheduleWithFixedDelay(
           () -> runSafely("flush", logManager::flushTick), 100, 100, TimeUnit.MILLISECONDS);
+      scheduler.scheduleWithFixedDelay(
+          () -> runSafely("groups", groupCoordinator::tick), 100, 100, TimeUnit.MILLISECONDS);
+      scheduler.scheduleWithFixedDelay(
+          () -> runSafely("compaction", this::compactNow),
+          config.compactionIntervalMs,
+          config.compactionIntervalMs,
+          TimeUnit.MILLISECONDS);
       long isrPeriod = Math.max(50, config.replicaLagTimeMaxMs / 4);
       scheduler.scheduleWithFixedDelay(
           () -> runSafely("isr", () -> replicaManager.isrShrinkTick(config.replicaLagTimeMaxMs)),
@@ -268,6 +288,29 @@ public final class Node implements AutoCloseable {
     }
   }
 
+  /**
+   * Compacts every {@code cleanup.policy=compact} partition this broker holds, below its high
+   * watermark. Runs on a timer; public so tests can trigger a pass.
+   *
+   * @return records removed
+   */
+  public long compactNow() {
+    long removed = 0;
+    for (Partition p : replicaManager.partitions().values()) {
+      if (p.log() == null || p.config() == null || !p.config().compact()) {
+        continue;
+      }
+      try {
+        removed +=
+            Compactor.compact(p.log(), System.currentTimeMillis(), p.highWatermark())
+                .recordsRemoved();
+      } catch (IOException | RuntimeException e) {
+        LOG.error("compaction failed", e, "partition", p.topicPartition().toString());
+      }
+    }
+    return removed;
+  }
+
   /** What this broker reports about itself; also served at /api/v1/local. */
   public Map<String, Object> statusJson() {
     return Json.obj(
@@ -276,7 +319,8 @@ public final class Node implements AutoCloseable {
         "messagesIn", replicaManager == null ? 0 : replicaManager.messagesIn(),
         "bytesIn", replicaManager == null ? 0 : replicaManager.bytesIn(),
         "bytesOut", replicaManager == null ? 0 : replicaManager.bytesOut(),
-        "connections", server == null ? 0 : server.openConnections());
+        "connections", server == null ? 0 : server.openConnections(),
+        "groups", groupCoordinator == null ? List.of() : groupCoordinator.status());
   }
 
   // ------------------------------------------------------------------ accessors (tests, admin)

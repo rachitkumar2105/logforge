@@ -85,7 +85,9 @@ class ProducerRetryDedupTest {
                   .retryBackoffMs(50)
                   .build())) {
         RecordMetadata md = p.send(topic, null, "exactly-once".getBytes(UTF_8)).get();
-        assertThat(md.offset()).isZero();
+        // Idempotent: the retry is answered with the original offset. Without idempotence the
+        // retry is appended again, so the acknowledged offset is the duplicate's.
+        assertThat(md.offset()).isEqualTo(idempotent ? 0L : 1L);
       }
       assertThat(proxy.connectionsCut()).as("the first response was really dropped").isEqualTo(1);
       assertThat(proxy.producesForwarded())

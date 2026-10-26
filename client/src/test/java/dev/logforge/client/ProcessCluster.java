@@ -115,5 +115,8 @@ final class ProcessCluster implements AutoCloseable {
         p.waitFor(30, TimeUnit.SECONDS);
       }
     }
+    // Windows releases a dead process's file handles (and mapped index files) shortly after the
+    // process is reported gone; give it a moment so the temp directory can be deleted.
+    Thread.sleep(1_500);
   }
 }

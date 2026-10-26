@@ -37,6 +37,7 @@ public final class Consumer implements AutoCloseable {
   private final ExecutorService fetchPool;
   private final Map<Integer, dev.logforge.network.BlockingChannel> fetchChannels = new HashMap<>();
   private final Set<TopicPartition> assignment = new LinkedHashSet<>();
+  private volatile Set<TopicPartition> assignmentView = Set.of();
   private final Map<TopicPartition, Long> positions = new HashMap<>();
   private final ArrayDeque<ConsumerRecord> buffered = new ArrayDeque<>();
   private GroupMembership group;
@@ -78,6 +79,7 @@ public final class Consumer implements AutoCloseable {
   void setAssignment(Collection<TopicPartition> partitions) {
     assignment.clear();
     assignment.addAll(partitions);
+    assignmentView = Set.copyOf(assignment);
     positions.keySet().retainAll(assignment);
     buffered.removeIf(r -> !assignment.contains(new TopicPartition(r.topic(), r.partition())));
   }
@@ -93,8 +95,16 @@ public final class Consumer implements AutoCloseable {
     group.ensureActive();
   }
 
+  /** Current assignment. Safe to call from any thread. */
   public Set<TopicPartition> assignment() {
-    return Set.copyOf(assignment);
+    return assignmentView;
+  }
+
+  /** Test hook: stop heartbeating without leaving the group, as a crashed process would. */
+  void simulateCrash() {
+    if (group != null) {
+      group.abandon();
+    }
   }
 
   public void seek(TopicPartition tp, long offset) {
