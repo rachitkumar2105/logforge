@@ -295,7 +295,24 @@ public final class GroupCoordinator {
 
   // ------------------------------------------------------------------ membership
 
+  /** Group ids become part of offset-record keys; keep them printable and separator-free. */
+  static boolean isValidGroupId(String id) {
+    if (id == null || id.isEmpty() || id.length() > 255) {
+      return false;
+    }
+    for (int i = 0; i < id.length(); i++) {
+      if (Character.isISOControl(id.charAt(i))) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   private CompletableFuture<Groups.JoinResponse> join(Groups.JoinRequest req) {
+    if (!isValidGroupId(req.groupId())) {
+      return CompletableFuture.completedFuture(
+          Groups.JoinResponse.error(Errors.INVALID_REQUEST.code(), req.memberId()));
+    }
     if (!Assignors.isKnown(req.assignor())) {
       return CompletableFuture.completedFuture(
           Groups.JoinResponse.error(Errors.INVALID_REQUEST.code(), req.memberId()));
@@ -462,6 +479,15 @@ public final class GroupCoordinator {
   /** Expires silent members and finishes rebalances whose timeout passed. Called every ~100 ms. */
   public void tick() {
     long now = clock.getAsLong();
+    // Forget groups with no members; their committed offsets stay in the offsets map and log.
+    groups
+        .values()
+        .removeIf(
+            g -> {
+              synchronized (g) {
+                return g.state == State.EMPTY && g.members.isEmpty();
+              }
+            });
     for (Group g : groups.values()) {
       synchronized (g) {
         List<String> expired = new ArrayList<>();
@@ -499,6 +525,9 @@ public final class GroupCoordinator {
   }
 
   private CompletableFuture<Groups.OffsetCommitResponse> commit(Groups.OffsetCommitRequest req) {
+    if (!isValidGroupId(req.groupId())) {
+      return CompletableFuture.completedFuture(uniform(req, Errors.INVALID_REQUEST));
+    }
     Partition partition = coordinatorPartition(req.groupId());
     Errors check = partition == null ? Errors.NOT_COORDINATOR : validateCommit(req);
     if (check != Errors.NONE) {

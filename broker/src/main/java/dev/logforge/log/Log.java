@@ -455,13 +455,21 @@ public final class Log implements Closeable {
         return null;
       }
       old.close();
-      Files.deleteIfExists(old.indexFile());
-      Files.move(
-          cleaned,
-          old.logFile(),
-          java.nio.file.StandardCopyOption.REPLACE_EXISTING,
-          java.nio.file.StandardCopyOption.ATOMIC_MOVE);
-      LogSegment fresh = LogSegment.openSealed(dir, old.baseOffset(), config);
+      LogSegment fresh;
+      try {
+        Files.deleteIfExists(old.indexFile());
+        Files.move(
+            cleaned,
+            old.logFile(),
+            java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+            java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        fresh = LogSegment.openSealed(dir, old.baseOffset(), config);
+      } catch (IOException | RuntimeException e) {
+        // Put a working segment back (the original file if the move never happened, otherwise
+        // the compacted one): never leave a closed segment in the map.
+        segments.put(old.baseOffset(), LogSegment.openSealed(dir, old.baseOffset(), config));
+        throw e;
+      }
       segments.put(old.baseOffset(), fresh);
       return fresh;
     } finally {
