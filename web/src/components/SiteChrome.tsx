@@ -11,11 +11,11 @@ export function Header() {
           logforge
         </Link>
         <ul className="ml-auto flex flex-wrap gap-x-5 gap-y-1 text-sm">
-          <li><a href="/#topology">Topology</a></li>
-          <li><a href="/#replay">Replay</a></li>
-          <li><a href="/#explorer">Explorer</a></li>
-          <li><a href="/#benchmarks">Benchmarks</a></li>
-          <li><a href="/#limitations">Limitations</a></li>
+          <li><Link href="/#topology">Topology</Link></li>
+          <li><Link href="/#replay">Replay</Link></li>
+          <li><Link href="/#explorer">Explorer</Link></li>
+          <li><Link href="/#benchmarks">Benchmarks</Link></li>
+          <li><Link href="/#limitations">Limitations</Link></li>
         </ul>
       </nav>
     </header>

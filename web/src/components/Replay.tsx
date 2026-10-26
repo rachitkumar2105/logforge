@@ -83,7 +83,7 @@ function Tape({ frame, max }: { frame: ReplayFrame; max: number }) {
 
 export function Replay({ data, chaos }: { data: ReplayData | null; chaos: ChaosResult | undefined }) {
   const reduced = useReducedMotionPref();
-  const frames = data?.frames ?? [];
+  const frames = useMemo(() => data?.frames ?? [], [data]);
   const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
   const started = useRef(false);
