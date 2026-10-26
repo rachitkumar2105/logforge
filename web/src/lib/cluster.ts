@@ -1,17 +1,19 @@
 import "server-only";
-import snapshot from "@/data/cluster-snapshot.json";
+import type { PingResult } from "./brokerStatus";
+import { recordedCluster } from "./snapshot";
 import type { ClusterResponse, ClusterView } from "./types";
 
 // Read-only access to the cluster's admin API, server side only. The read token never leaves the
 // server (S8, S12). Responses are cached for 2 s so all visitors together cost at most one admin
 // request per interval (the admin API rate-limits per IP). When the cluster is unreachable the
-// recorded snapshot is returned, labelled as such.
+// recorded snapshot is returned, labelled as such. Nothing here runs during page rendering: the
+// page paints with the recorded snapshot and the browser asks these routes afterwards.
 
 const CACHE_MS = 2_000;
 let cached: { at: number; body: ClusterResponse } | null = null;
 
 function fromSnapshot(reason: string): ClusterResponse {
-  return { source: "snapshot", fetchedAtMs: Date.now(), reason, cluster: snapshot as unknown as ClusterView };
+  return { source: "snapshot", fetchedAtMs: Date.now(), reason, cluster: recordedCluster };
 }
 
 async function fetchCluster(): Promise<ClusterResponse> {
@@ -42,4 +44,32 @@ export async function getCluster(): Promise<ClusterResponse> {
     cached = { at: now, body: await fetchCluster() };
   }
   return cached.body;
+}
+
+/** Below Vercel Hobby's 10 s function limit; a waking broker is simply asked again. */
+const HEALTH_TIMEOUT_MS = 8_000;
+let healthy: number | null = null;
+
+/** Pings the admin API's public /health. A success is reused for one second. */
+export async function checkHealth(): Promise<PingResult> {
+  const base = process.env.LOGFORGE_ADMIN_URL;
+  if (!base || !process.env.LOGFORGE_READ_TOKEN) {
+    return { ok: false, reason: "not-configured" };
+  }
+  if (healthy !== null && Date.now() - healthy < 1_000) {
+    return { ok: true };
+  }
+  try {
+    const res = await fetch(new URL("/health", base), {
+      cache: "no-store",
+      signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
+    });
+    if (res.ok) {
+      healthy = Date.now();
+      return { ok: true };
+    }
+  } catch {
+    // asleep, waking or unreachable: the browser retries with backoff
+  }
+  return { ok: false, reason: "unreachable" };
 }

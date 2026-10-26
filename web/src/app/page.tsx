@@ -10,23 +10,22 @@ import { Replay } from "@/components/Replay";
 import { SegmentExplorer } from "@/components/SegmentExplorer";
 import { Footer, Header, REPO_URL } from "@/components/SiteChrome";
 import { Topology } from "@/components/Topology";
-import { getCluster } from "@/lib/cluster";
 import type { BenchResult, ChaosResult, Replay as ReplayData, SegmentSample } from "@/lib/types";
 
-// Rendered per request: the live topology's first paint is real, and the CSP nonce applies.
+// Rendered per request so the CSP nonce applies. Nothing here waits for the broker: the live
+// topology paints with the recorded snapshot and asks the hosted broker from the browser.
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
+export default function Home() {
   const bench = (benchData as { results: BenchResult[] }).results;
   const chaos = (chaosData as { results: ChaosResult[] }).results;
   const headline = bench.find((r) => r.system === "logforge" && r.config.label === "baseline-1KB");
-  const cluster = await getCluster();
   return (
     <>
       <Header />
       <main id="main">
         <Hero headline={headline} />
-        <Topology initial={cluster} />
+        <Topology />
         <Replay data={replayData as unknown as ReplayData} chaos={chaos.find((c) => c.scenario === "leader-kill")} />
         <SegmentExplorer sample={segmentSample as unknown as SegmentSample} />
         <Benchmarks results={bench} repoUrl={REPO_URL} />

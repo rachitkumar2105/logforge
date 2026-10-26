@@ -1,13 +1,18 @@
 "use client";
 
 import { motion } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BrokerIcon } from "./Icons";
+import { BrokerPill } from "./BrokerPill";
+import { POLL_MS } from "@/lib/brokerStatus";
+import { recordedResponse } from "@/lib/snapshot";
 import type { BrokerView, ClusterResponse, PartitionView, TopicView } from "@/lib/types";
 import { fixed, int } from "@/lib/format";
+import { useBrokerPhase } from "@/lib/useBrokerPhase";
 import { usePageVisible, useReducedMotionPref } from "@/lib/useReducedMotion";
 
-const POLL_MS = 3_000;
+/** Consecutive failed live polls before the indicator starts over from "checking". */
+const MAX_POLL_FAILURES = 3;
 
 type Role = "leader" | "insync" | "lagging" | "down";
 
@@ -148,50 +153,24 @@ function BrokerHeader({ b, leaders }: { b: BrokerView; leaders: number }) {
   );
 }
 
-export function Topology({ initial }: { initial: ClusterResponse }) {
-  const [data, setData] = useState<ClusterResponse>(initial);
-  const [pollCount, setPollCount] = useState(0);
+function utc(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 16).replace("T", " ") + " UTC";
+}
+
+/** The graph, legend and table for one cluster view. */
+function ClusterGraph({
+  data,
+  pollCount,
+  flowing,
+}: {
+  data: ClusterResponse;
+  pollCount: number;
+  flowing: Set<string>;
+}) {
   const [showInternal, setShowInternal] = useState(false);
   const [topicName, setTopicName] = useState<string | null>(null);
-  const prevEnd = useRef<Map<string, number>>(new Map());
-  const [flowing, setFlowing] = useState<Set<string>>(new Set());
-  const visible = usePageVisible();
-
-  useEffect(() => {
-    if (!visible) return;
-    let stopped = false;
-    const tick = async () => {
-      try {
-        const res = await fetch("/api/cluster", { cache: "no-store" });
-        if (!res.ok) return;
-        const next = (await res.json()) as ClusterResponse;
-        if (stopped) return;
-        const grew = new Set<string>();
-        for (const t of next.cluster.topics) {
-          for (const p of t.partitions) {
-            const key = `${t.name}-${p.partition}`;
-            const leaderEnd = p.replicaState.find((r) => r.brokerId === p.leader)?.logEndOffset ?? -1;
-            const before = prevEnd.current.get(key);
-            if (before !== undefined && leaderEnd > before) grew.add(key);
-            prevEnd.current.set(key, leaderEnd);
-          }
-        }
-        setFlowing(grew);
-        setData(next);
-        setPollCount((c) => c + 1);
-      } catch {
-        // keep showing the last state; the status line says when it was fetched
-      }
-    };
-    void tick();
-    const id = window.setInterval(tick, POLL_MS);
-    return () => {
-      stopped = true;
-      window.clearInterval(id);
-    };
-  }, [visible]);
-
   const cluster = data.cluster;
+  const live = data.source === "live";
   const brokers = useMemo(
     () =>
       cluster.brokers
@@ -208,164 +187,258 @@ export function Topology({ initial }: { initial: ClusterResponse }) {
   const leadersOf = (id: number) => allPartitions.filter((p) => p.leader === id).length;
   const controller = cluster.brokers.find((b) => b.controller);
 
-  const status =
-    data.source === "live"
-      ? `Live from the cluster. ${alive} of ${brokers.length} brokers up, ${allPartitions.length} partitions, ${underReplicated} under-replicated or offline.`
-      : `Showing a recorded snapshot from ${new Date(cluster.capturedAtMs).toISOString().slice(0, 16).replace("T", " ")} UTC (${data.reason ?? "cluster unreachable"}).`;
+  const status = live
+    ? `Live: the hosted broker, ${alive} of ${brokers.length} ${brokers.length === 1 ? "node" : "nodes"} up, ${allPartitions.length} partitions, ${underReplicated} under-replicated or offline. Updated ${utc(data.fetchedAtMs)}.`
+    : `Recorded, not live: the local ${brokers.length}-broker cluster as captured at ${utc(cluster.capturedAtMs)}.`;
+
+  return (
+    <div data-testid={live ? "topology-live" : "topology-recorded"}>
+      <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+        <p className={`mono text-sm ${live ? "text-accent" : "text-muted"}`}>{status}</p>
+        <p className="mono text-sm text-muted">
+          {fixed(cluster.rates.messagesInPerSec, 0)} msg/s in, {fixed(cluster.rates.bytesInPerSec / 1e6, 2)} MB/s,
+          one-minute moving average
+        </p>
+        {underReplicated > 0 ? <p className="mono text-sm text-fail">{underReplicated} under-replicated</p> : null}
+      </div>
+
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        {topics.map((t) => (
+          <button
+            key={t.name}
+            type="button"
+            className="btn"
+            aria-pressed={t.name === topic?.name}
+            onClick={() => setTopicName(t.name)}
+          >
+            {t.name}
+          </button>
+        ))}
+        <label className="btn">
+          <input
+            type="checkbox"
+            className="accent-[var(--accent)]"
+            checked={showInternal}
+            onChange={(e) => setShowInternal(e.target.checked)}
+          />
+          internal topics
+        </label>
+      </div>
+
+      <div className="mt-6">
+        <Legend />
+      </div>
+      {controller ? (
+        <p className="mono mt-3 text-xs text-muted">
+          controller: node {controller.id} ({controller.alive ? "up" : "down"}), single fixed controller, see
+          limitations
+        </p>
+      ) : null}
+
+      {!topic ? (
+        <p className="panel mt-8 p-6 text-muted">No topics yet. Brokers are shown above once they register.</p>
+      ) : (
+        <>
+          {/* Desktop and tablet: brokers as columns, partitions as rows. */}
+          <div className="mt-8 hidden md:block">
+            <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${brokers.length}, minmax(0, 1fr))` }}>
+              {brokers.map((b) => (
+                <BrokerHeader key={b.id} b={b} leaders={leadersOf(b.id)} />
+              ))}
+            </div>
+            <div className="mt-3 grid gap-2">
+              {partitions.map((p) => (
+                <div
+                  key={p.partition}
+                  className="relative grid items-center gap-3 py-1"
+                  style={{ gridTemplateColumns: `repeat(${brokers.length}, minmax(0, 1fr))` }}
+                >
+                  <ReplicationLines
+                    p={p}
+                    brokers={brokers}
+                    pulseKey={pollCount}
+                    flowing={flowing.has(`${topic.name}-${p.partition}`)}
+                  />
+                  {brokers.map((b) => (
+                    <div key={b.id}>{p.replicas.includes(b.id) ? <ReplicaChip p={p} broker={b} /> : null}</div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Phones: brokers stacked, partition detail behind a tap. */}
+          <div className="mt-8 grid gap-3 md:hidden">
+            {brokers.map((b) => {
+              const held = partitions.filter((p) => p.replicas.includes(b.id));
+              return (
+                <div key={b.id}>
+                  <BrokerHeader b={b} leaders={leadersOf(b.id)} />
+                  <details className="panel mt-1 px-3">
+                    <summary className="mono text-sm text-muted">
+                      {held.length} replicas of {topic.name}
+                    </summary>
+                    <div className="grid gap-2 pb-3">
+                      {held.map((p) => (
+                        <ReplicaChip key={p.partition} p={p} broker={b} />
+                      ))}
+                    </div>
+                  </details>
+                </div>
+              );
+            })}
+          </div>
+
+          <details className="panel mt-6 px-4">
+            <summary className="text-sm">Topology as a table</summary>
+            <div className="overflow-x-auto pb-4">
+              <table className="data">
+                <caption className="sr-only">Partitions of {topic.name}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">partition</th>
+                    <th scope="col">leader</th>
+                    <th scope="col">replicas</th>
+                    <th scope="col">in-sync</th>
+                    <th scope="col">log end by replica</th>
+                    <th scope="col">state</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topic.partitions.map((p) => (
+                    <tr key={p.partition}>
+                      <td>{p.partition}</td>
+                      <td>{p.leader < 0 ? "none" : p.leader}</td>
+                      <td>{p.replicas.join(", ")}</td>
+                      <td>{p.isr.join(", ")}</td>
+                      <td>{p.replicaState.map((r) => `${r.brokerId}:${r.logEndOffset}`).join("  ")}</td>
+                      <td className={p.offline || p.underReplicated ? "text-fail" : ""}>
+                        {p.offline ? "offline" : p.underReplicated ? "under-replicated" : "healthy"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        </>
+      )}
+    </div>
+  );
+}
+
+const NO_FLOW = new Set<string>();
+
+/**
+ * Paints at once with the recorded snapshot of the local three-node cluster. The hosted broker is
+ * asked afterwards; when it answers, the view cross-fades to its real state.
+ */
+export function Topology() {
+  const { phase, elapsedS, pillShown, restart } = useBrokerPhase();
+  const visible = usePageVisible();
+  const [live, setLive] = useState<ClusterResponse | null>(null);
+  const [pollCount, setPollCount] = useState(0);
+  const prevEnd = useRef<Map<string, number>>(new Map());
+  const [flowing, setFlowing] = useState<Set<string>>(NO_FLOW);
+  const failures = useRef(0);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [minHeight, setMinHeight] = useState<number | undefined>(undefined);
+  const [fadedIn, setFadedIn] = useState(false);
+  const [recordedGone, setRecordedGone] = useState(false);
+
+  useEffect(() => {
+    if (phase !== "live" || !visible) return;
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const res = await fetch("/api/cluster", { cache: "no-store" });
+        const next = res.ok ? ((await res.json()) as ClusterResponse) : null;
+        if (stopped) return;
+        if (!next || next.source !== "live") {
+          failures.current += 1;
+          if (failures.current >= MAX_POLL_FAILURES) {
+            failures.current = 0;
+            restart(); // asleep again: the last live view stays while the indicator asks
+          }
+          return;
+        }
+        failures.current = 0;
+        const grew = new Set<string>();
+        for (const t of next.cluster.topics) {
+          for (const p of t.partitions) {
+            const key = `${t.name}-${p.partition}`;
+            const leaderEnd = p.replicaState.find((r) => r.brokerId === p.leader)?.logEndOffset ?? -1;
+            const before = prevEnd.current.get(key);
+            if (before !== undefined && leaderEnd > before) grew.add(key);
+            prevEnd.current.set(key, leaderEnd);
+          }
+        }
+        setFlowing(grew);
+        setLive(next);
+        setPollCount((c) => c + 1);
+      } catch {
+        failures.current += 1;
+      }
+    };
+    void tick();
+    const id = window.setInterval(tick, POLL_MS);
+    return () => {
+      stopped = true;
+      window.clearInterval(id);
+    };
+  }, [phase, visible, restart]);
+
+  // Cross-fade: both views share one grid cell, so the box is as tall as the taller one, and its
+  // height is then held so that removing the recorded view moves nothing below it.
+  const hasLive = live !== null;
+  useLayoutEffect(() => {
+    if (hasLive && boxRef.current) setMinHeight(boxRef.current.offsetHeight);
+  }, [hasLive]);
+  useEffect(() => {
+    if (!hasLive) return;
+    const r = window.requestAnimationFrame(() => setFadedIn(true));
+    const t = window.setTimeout(() => setRecordedGone(true), 700);
+    return () => {
+      window.cancelAnimationFrame(r);
+      window.clearTimeout(t);
+    };
+  }, [hasLive]);
 
   return (
     <section id="topology" aria-labelledby="topology-title" className="border-b border-line py-20">
       <div className="wrap">
         <p className="label">02 / Live cluster topology</p>
-        <h2 id="topology-title" className="h2 mt-3 max-w-3xl">
-          Who leads, who follows, who is in sync
-        </h2>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+          <h2 id="topology-title" className="h2 min-w-0 max-w-3xl flex-[1_1_20rem]">
+            Who leads, who follows, who is in sync
+          </h2>
+          <BrokerPill phase={phase} elapsedS={elapsedS} shown={pillShown} />
+        </div>
         <p className="mt-4 max-w-2xl text-muted">
-          Polled every three seconds from the controller&apos;s admin API through a server-side route; the browser
-          never holds a token. Leaders are solid, in-sync followers are outlined, followers outside the ISR are dashed.
-          When a broker dies its column turns red, its partitions lose it from the ISR and leadership moves.
+          The hosted demo is one broker on a free tier, so this section can show a real broker answering but not
+          replication between brokers: with one node there is no in-sync set to shrink, no election and no failover.
+          Until it answers, and whenever it is asleep, you see a recorded snapshot of the local three-node cluster,
+          labelled as recorded. Leaders are solid, in-sync followers outlined, out-of-sync followers dashed, and a
+          dead broker&apos;s column turns red. The crash-recovery replay below is a recorded three-node run.
         </p>
 
-        <div className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-3">
-          <p
-            aria-live="polite"
-            className={`mono text-sm ${data.source === "live" ? "text-accent" : "text-muted"}`}
-          >
-            <span
-              aria-hidden
-              className={`mr-2 inline-block h-2 w-2 rounded-full ${data.source === "live" ? "bg-accent" : "bg-[var(--warn-line)]"}`}
-            />
-            {status}
-          </p>
-          <p className="mono text-sm text-muted">
-            {fixed(cluster.rates.messagesInPerSec, 0)} msg/s in, {fixed(cluster.rates.bytesInPerSec / 1e6, 2)} MB/s
-          </p>
-          {underReplicated > 0 ? (
-            <p className="mono text-sm text-fail">{underReplicated} under-replicated</p>
+        <div ref={boxRef} className="mt-8 grid" style={{ minHeight }}>
+          {!recordedGone ? (
+            <div
+              className="crossfade-layer"
+              style={{ opacity: fadedIn ? 0 : 1 }}
+              aria-hidden={hasLive}
+              inert={hasLive}
+            >
+              <ClusterGraph data={recordedResponse} pollCount={0} flowing={NO_FLOW} />
+            </div>
+          ) : null}
+          {live ? (
+            <div className="crossfade-layer" style={{ opacity: fadedIn ? 1 : 0 }}>
+              <ClusterGraph data={live} pollCount={pollCount} flowing={flowing} />
+            </div>
           ) : null}
         </div>
-
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          {topics.map((t) => (
-            <button
-              key={t.name}
-              type="button"
-              className="btn"
-              aria-pressed={t.name === topic?.name}
-              onClick={() => setTopicName(t.name)}
-            >
-              {t.name}
-            </button>
-          ))}
-          <label className="btn">
-            <input
-              type="checkbox"
-              className="accent-[var(--accent)]"
-              checked={showInternal}
-              onChange={(e) => setShowInternal(e.target.checked)}
-            />
-            internal topics
-          </label>
-        </div>
-
-        <div className="mt-6">
-          <Legend />
-        </div>
-        {controller ? (
-          <p className="mono mt-3 text-xs text-muted">
-            controller: node {controller.id} ({controller.alive ? "up" : "down"}), single fixed controller, see
-            limitations
-          </p>
-        ) : null}
-
-        {!topic ? (
-          <p className="panel mt-8 p-6 text-muted">No topics yet. Brokers are shown above once they register.</p>
-        ) : (
-          <>
-            {/* Desktop and tablet: brokers as columns, partitions as rows. */}
-            <div className="mt-8 hidden md:block">
-              <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${brokers.length}, minmax(0, 1fr))` }}>
-                {brokers.map((b) => (
-                  <BrokerHeader key={b.id} b={b} leaders={leadersOf(b.id)} />
-                ))}
-              </div>
-              <div className="mt-3 grid gap-2">
-                {partitions.map((p) => (
-                  <div
-                    key={p.partition}
-                    className="relative grid items-center gap-3 py-1"
-                    style={{ gridTemplateColumns: `repeat(${brokers.length}, minmax(0, 1fr))` }}
-                  >
-                    <ReplicationLines
-                      p={p}
-                      brokers={brokers}
-                      pulseKey={pollCount}
-                      flowing={flowing.has(`${topic.name}-${p.partition}`)}
-                    />
-                    {brokers.map((b) => (
-                      <div key={b.id}>{p.replicas.includes(b.id) ? <ReplicaChip p={p} broker={b} /> : null}</div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Phones: brokers stacked, partition detail behind a tap. */}
-            <div className="mt-8 grid gap-3 md:hidden">
-              {brokers.map((b) => {
-                const held = partitions.filter((p) => p.replicas.includes(b.id));
-                return (
-                  <div key={b.id}>
-                    <BrokerHeader b={b} leaders={leadersOf(b.id)} />
-                    <details className="panel mt-1 px-3">
-                      <summary className="mono text-sm text-muted">
-                        {held.length} replicas of {topic.name}
-                      </summary>
-                      <div className="grid gap-2 pb-3">
-                        {held.map((p) => (
-                          <ReplicaChip key={p.partition} p={p} broker={b} />
-                        ))}
-                      </div>
-                    </details>
-                  </div>
-                );
-              })}
-            </div>
-
-            <details className="panel mt-6 px-4">
-              <summary className="text-sm">Topology as a table</summary>
-              <div className="overflow-x-auto pb-4">
-                <table className="data">
-                  <caption className="sr-only">Partitions of {topic.name}</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">partition</th>
-                      <th scope="col">leader</th>
-                      <th scope="col">replicas</th>
-                      <th scope="col">in-sync</th>
-                      <th scope="col">log end by replica</th>
-                      <th scope="col">state</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {topic.partitions.map((p) => (
-                      <tr key={p.partition}>
-                        <td>{p.partition}</td>
-                        <td>{p.leader < 0 ? "none" : p.leader}</td>
-                        <td>{p.replicas.join(", ")}</td>
-                        <td>{p.isr.join(", ")}</td>
-                        <td>{p.replicaState.map((r) => `${r.brokerId}:${r.logEndOffset}`).join("  ")}</td>
-                        <td className={p.offline || p.underReplicated ? "text-fail" : ""}>
-                          {p.offline ? "offline" : p.underReplicated ? "under-replicated" : "healthy"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          </>
-        )}
       </div>
     </section>
   );
