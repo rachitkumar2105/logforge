@@ -33,6 +33,6 @@ services:
         generateValue: true
       - key: LOGFORGE_READ_TOKEN
         generateValue: true
-      # The site's production origin, e.g. https://<project>.vercel.app. Not a secret.
+      # The site's production origin. Not a secret.
       - key: LOGFORGE_CORS_ORIGINS
-        sync: false
+        value: https://logforge-five.vercel.app
