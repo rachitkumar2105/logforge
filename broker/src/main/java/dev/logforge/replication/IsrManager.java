@@ -72,6 +72,7 @@ public final class IsrManager {
   private int partitionEpoch = -1;
   private boolean inFlight;
   private long highWatermark;
+  private long leaderEpochStartOffset;
 
   /**
    * @param sender sends AlterIsr to the controller (null: never propose, e.g. in unit tests)
@@ -95,7 +96,9 @@ public final class IsrManager {
       List<Integer> replicas,
       List<Integer> isr,
       long startHw,
+      long epochStartOffset,
       long nowMs) {
+    this.leaderEpochStartOffset = epochStartOffset;
     this.leaderEpoch = leaderEpoch;
     this.partitionEpoch = partitionEpoch;
     this.isr = new TreeSet<>(isr);
@@ -149,9 +152,12 @@ public final class IsrManager {
       return false;
     }
     r.onFetch(fetchOffset, leaderLogEnd, nowMs);
+    // Caught up to the HW *and* to the start of this leader's epoch. A new leader's HW can lag the
+    // offset the previous leader had committed; the epoch start offset is a safe lower bound, so a
+    // follower missing committed records cannot rejoin the ISR and later be elected.
     if (!isr.contains(followerId)
         && !pendingAdd.contains(followerId)
-        && fetchOffset >= highWatermark) {
+        && fetchOffset >= Math.max(highWatermark, leaderEpochStartOffset)) {
       Set<Integer> proposed = new TreeSet<>(isr);
       proposed.add(followerId);
       if (propose(proposed)) {

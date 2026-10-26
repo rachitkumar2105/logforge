@@ -169,7 +169,14 @@ public final class Partition {
       this.leaderId = localId;
       long startHw = Math.max(log.logStartOffset(), Math.min(previousHw, log.logEndOffset()));
       synchronized (isrMonitor) {
-        isr.becomeLeader(epoch, partitionEpoch, replicas, isrList, startHw, clock.getAsLong());
+        isr.becomeLeader(
+            epoch,
+            partitionEpoch,
+            replicas,
+            isrList,
+            startHw,
+            log.logEndOffset(),
+            clock.getAsLong());
         isr.maybeAdvanceHighWatermark(log.logEndOffset());
       }
     } finally {

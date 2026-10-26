@@ -43,7 +43,7 @@ final class ReplicaFetcher extends Thread {
   private static final JsonLog LOG = JsonLog.get(ReplicaFetcher.class);
 
   private static final class State {
-    final int leaderEpoch;
+    volatile int leaderEpoch;
     volatile boolean needsTruncation = true;
     volatile long backoffUntilMs;
 
@@ -85,8 +85,13 @@ final class ReplicaFetcher extends Thread {
 
   synchronized void add(TopicPartition tp, int leaderEpoch) {
     State s = partitions.get(tp);
-    if (s == null || s.leaderEpoch != leaderEpoch) {
+    if (s == null) {
       partitions.put(tp, new State(leaderEpoch));
+    } else if (s.leaderEpoch != leaderEpoch) {
+      // Update in place: the run loop may hold this object from its last snapshot.
+      s.leaderEpoch = leaderEpoch;
+      s.needsTruncation = true;
+      s.backoffUntilMs = 0;
     }
     notifyAll();
   }
@@ -320,6 +325,20 @@ final class ReplicaFetcher extends Thread {
             for (RecordBatch b : RecordBatch.iterate(r.records())) {
               if (b.lastOffset() < leo) {
                 continue;
+              }
+              if (b.baseOffset() > p.logEndOffset() && !p.config().compact()) {
+                // Only compaction may leave offset gaps. Anything else means the logs diverged:
+                // re-run the epoch handshake instead of appending a hole.
+                LOG.warn(
+                    "offset gap from leader; re-validating",
+                    "partition",
+                    tp.toString(),
+                    "logEnd",
+                    p.logEndOffset(),
+                    "batchBase",
+                    b.baseOffset());
+                s.needsTruncation = true;
+                break;
               }
               p.appendAsFollower(b);
             }

@@ -24,6 +24,7 @@ final class ClientMetadata implements Closeable {
   private final String clientId;
   private final int requestTimeoutMs;
   private final Map<Integer, Address> brokers = new ConcurrentHashMap<>();
+  private final java.util.Set<Integer> aliveBrokers = ConcurrentHashMap.newKeySet();
   private final Map<String, List<Metadata.PartitionMeta>> topics = new ConcurrentHashMap<>();
   private final Map<Integer, BlockingChannel> channels = new ConcurrentHashMap<>();
   private volatile int controllerId = -1;
@@ -79,6 +80,12 @@ final class ClientMetadata implements Closeable {
     }
     brokers.keySet().retainAll(bs.keySet());
     brokers.putAll(bs);
+    aliveBrokers.clear();
+    for (Metadata.Broker b : md.brokers()) {
+      if (b.alive()) {
+        aliveBrokers.add(b.nodeId());
+      }
+    }
     topics.clear();
     for (Metadata.TopicMeta t : md.topics()) {
       if (t.errorCode() == Errors.NONE.code()) {
@@ -174,7 +181,7 @@ final class ClientMetadata implements Closeable {
     }
     int pick = -1;
     for (int id : brokers.keySet()) {
-      if (id != controllerId) {
+      if (id != controllerId && aliveBrokers.contains(id)) {
         pick = id;
         break;
       }
