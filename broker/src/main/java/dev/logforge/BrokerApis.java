@@ -131,14 +131,30 @@ final class BrokerApis implements RequestHandler {
 
   private static final Errors UNAUTHORIZED = Errors.CLUSTER_AUTHORIZATION_FAILED;
 
+  /** Wrong tokens tolerated per connection; the next one closes it. */
+  private static final int MAX_AUTH_FAILURES = 3;
+
+  private final java.util.concurrent.atomic.AtomicLong authRefusals =
+      new java.util.concurrent.atomic.AtomicLong();
+  private volatile long lastAuthWarnMs;
+
   private CompletableFuture<ByteBuffer> authenticate(Context ctx, Authenticate.Request req) {
     byte[] given = req.token().getBytes(java.nio.charset.StandardCharsets.UTF_8);
     if (java.security.MessageDigest.isEqual(given, clusterToken)) {
       ctx.session().markClusterMember();
       return done(new Authenticate.Response(Errors.NONE.code())::write);
     }
-    // Never log the presented value.
-    LOG.warn("cluster authentication refused", "client", ctx.clientAddress());
+    long refusedTotal = authRefusals.incrementAndGet();
+    long now = System.currentTimeMillis();
+    if (now - lastAuthWarnMs > 10_000) {
+      // At most one line per 10 s, and never the presented value.
+      lastAuthWarnMs = now;
+      LOG.warn(
+          "cluster authentication refused", "client", ctx.clientAddress(), "total", refusedTotal);
+    }
+    if (ctx.session().recordAuthFailure() >= MAX_AUTH_FAILURES) {
+      throw new InvalidRequestException("too many failed authentications");
+    }
     return done(new Authenticate.Response(UNAUTHORIZED.code())::write);
   }
 

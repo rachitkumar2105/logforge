@@ -468,6 +468,11 @@ public final class NodeConfig {
         throw new IllegalArgumentException(
             "clusterToken must be at least " + MIN_CLUSTER_TOKEN_LENGTH + " characters");
       }
+      // The read token lives on the website; reusing it here would hand out cluster control.
+      if (clusterToken.equals(adminToken) || clusterToken.equals(readToken)) {
+        throw new IllegalArgumentException(
+            "the cluster token (LOGFORGE_CLUSTER_TOKEN) must differ from the admin and read tokens");
+      }
       return new NodeConfig(this);
     }
   }
