@@ -61,9 +61,10 @@ final class ReplicaFetcher extends Thread {
   private final int maxBytes;
   private final String clusterToken;
   private final Map<TopicPartition, State> partitions = new LinkedHashMap<>();
-  private BlockingChannel channel;
+  private volatile BlockingChannel channel;
   private int consecutiveFailures;
   private volatile boolean running = true;
+  private volatile boolean stoppedByInterrupt;
 
   ReplicaFetcher(
       int localId,
@@ -107,12 +108,26 @@ final class ReplicaFetcher extends Thread {
     return partitions.isEmpty();
   }
 
+  /**
+   * Stops the fetcher through its flag, never by interrupting the thread: an interrupt that lands
+   * while this thread writes or flushes fetched records closes the log's FileChannel, every later
+   * flush fails and the broker fences itself as if its disk had failed. Closing the channel wakes a
+   * fetch blocked on the network; {@code notifyAll} wakes an idle wait.
+   */
   void shutdown() {
     running = false;
-    interrupt();
-    if (channel != null) {
-      channel.close();
+    BlockingChannel ch = channel;
+    if (ch != null) {
+      ch.close();
     }
+    synchronized (this) {
+      notifyAll();
+    }
+  }
+
+  /** True if the thread ended because it was interrupted (tests: it must stop by its flag). */
+  boolean stoppedByInterrupt() {
+    return stoppedByInterrupt;
   }
 
   @Override
@@ -148,6 +163,7 @@ final class ReplicaFetcher extends Thread {
           Thread.sleep(50); // everything is backing off
         }
       } catch (InterruptedException e) {
+        stoppedByInterrupt = true;
         return;
       } catch (IOException | RuntimeException e) {
         if (running) {

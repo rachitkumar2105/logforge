@@ -29,7 +29,8 @@ public final class BlockingChannel implements Closeable {
   private final String clientId;
   private final int timeoutMs;
   private final String clusterToken;
-  private Socket socket;
+  private volatile Socket socket;
+  private volatile boolean closed;
   private DataInputStream in;
   private DataOutputStream out;
   private int correlation;
@@ -60,6 +61,9 @@ public final class BlockingChannel implements Closeable {
   }
 
   private void ensureConnected() throws IOException {
+    if (closed) {
+      throw new IOException("channel closed");
+    }
     if (socket != null && !socket.isClosed()) {
       return;
     }
@@ -156,8 +160,22 @@ public final class BlockingChannel implements Closeable {
     }
   }
 
+  /**
+   * Closes the channel for good. Deliberately not synchronized: another thread may be blocked in
+   * {@link #request} waiting for a peer that never answers (a paused broker), and waiting for its
+   * monitor would block the caller until that read times out. Closing the socket instead wakes the
+   * blocked reader with an IOException at once.
+   */
   @Override
   public void close() {
-    disconnect();
+    closed = true;
+    Socket s = socket;
+    if (s != null) {
+      try {
+        s.close();
+      } catch (IOException e) {
+        // already broken
+      }
+    }
   }
 }
