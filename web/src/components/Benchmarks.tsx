@@ -278,7 +278,7 @@ function Reading({ find }: { find: (s: string, l: string) => BenchResult | undef
   const list = (xs: string[]) => (xs.length ? xs.join(", ") : "none");
   return (
     <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_22rem]">
-      <div className="max-w-3xl space-y-4 text-sm leading-relaxed">
+      <div className="min-w-0 max-w-3xl space-y-4 text-sm leading-relaxed">
         <p className="label">Reading the comparison</p>
         <p>
           <strong>Noise first.</strong> The 1 KB baseline and the fsync never run are the same configuration
@@ -310,8 +310,9 @@ function Reading({ find }: { find: (s: string, l: string) => BenchResult | undef
           measured and explained, not hidden.
         </p>
       </div>
-      <div className="panel self-start p-4">
+      <div className="panel min-w-0 self-start p-4">
         <p className="label mb-3">Kafka MB/s divided by LogForge MB/s</p>
+        <div className="overflow-x-auto">
         <table className="data">
           <tbody>
             {rows.map((x) => (
@@ -325,6 +326,7 @@ function Reading({ find }: { find: (s: string, l: string) => BenchResult | undef
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
