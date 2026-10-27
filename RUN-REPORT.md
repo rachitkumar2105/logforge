@@ -214,3 +214,40 @@ Built: `Metrics` (Prometheus text format: messages in per topic, 1-minute EWMA m
 
 ### Not verified / assumed
 - Not launch-ready: no custom domain; privacy and terms are drafts, not legal advice. Vercel variables are set for Production only (not Preview). Uptime workflow needs the repository variable `BROKER_URL` and runs only from the default branch.
+
+---
+
+## Phase 7 (completed): audit findings F1 to F8 fixed
+
+The owner approved fixing F1 to F8, one concern per commit. Status table: `SECURITY-AUDIT.md`.
+
+### Verified
+- F1 cluster token on the binary protocol (`ClusterAuthTest` 7/7, including the review follow-ups: a third wrong token closes the connection, the token must differ from the HTTP tokens). Docker Compose leader-kill rerun with authentication: PASS, 64,294 acked, 0 missing, 0 duplicates, recovery 5.22 s, no refused authentication in any node log.
+- F2 connection caps (`ConnectionLimitsTest` 2/2), F3 status cap (`ControllerStatusLimitTest` 1/1), F5 minimal `/health` with HEAD and F6 HSTS (`AdminHttpServerTest` 9/9), F6 site refuses non-HTTPS admin URLs (`adminUrl.test.mjs`), F8 four methods removed. F4 and F7 documented as accepted risks in `SECURITY.md`.
+- Production after the fixes: Render rebuilt with a Render-generated `LOGFORGE_CLUSTER_TOKEN` in about 60 s; `curl https://logforge-broker.onrender.com/health` gives `{"status":"ok"}`; `curl -I` gives 200 with `strict-transport-security: max-age=63072000; includeSubDomains`; the site's `/api/cluster` reports `source live` with `demo-orders` re-seeded by the authenticated seeder.
+- `./mvnw -B -ntp verify` after all fixes and review fixes: BUILD SUCCESS, broker 112, client 12 (1 skipped, the SIGSTOP test that needs Linux), bench 1, `All coverage checks have been met.`
+- gitleaks v8.21.2 over full history: `68 commits scanned ... no leaks found`; no `.env` tracked.
+- Found while fixing: `Node.close` did not wait for background threads, so a late metadata update could touch a log after close and leave a file locked on Windows (AdminHttpServerTest temp-dir cleanup failed in 2 of 3 runs; 0 of 3 after the fix).
+
+### Tests changed, and why (AGENTS.md rule 3)
+No assertion was weakened. Each change is in its commit message too.
+- Test helpers (`TestNodes`, `TestClient`, `EmbeddedNode`, `ProcessCluster`, `HostedModeTest`, the client tests' `Admin` calls): F1 made the cluster token a required, real part of the API, so nodes start with a test token, and `TestClient` authenticates before topic administration and follower fetches, as the cluster's own tools do. `TestClient.anonymous` keeps an unauthenticated client for the refusal tests.
+- `ReplicationTest.staleOrFutureLeaderEpochsAreFenced`: after F1 the follower sometimes had not yet learned the new partition and answered UNKNOWN_TOPIC_OR_PARTITION instead of NOT_LEADER_OR_FOLLOWER; the test now waits until the follower holds the partition before probing it.
+- `SingleBrokerTest.deleteTopicRemovesItsData`: the broker drops a deleted partition from its map, then deletes the files; under load the test looked at the directory in between (passed 5 of 5 alone). It now waits up to 10 s for the directory to go, then asserts as before.
+- `ClusterAuthTest` (new): waited for leadership before producing, as every other test does.
+
+### Not verified / assumed
+- The cluster token travels in clear text on the cluster network; it is authentication, not encryption. Port 9092 must stay private.
+- No request-rate limit on the binary protocol beyond the connection caps.
+
+## Reviews (web interface guidelines, motion, code)
+
+### Verified
+- Web interface guidelines (vercel-labs `command.md`, fetched 2026-10-27): fixed the hero tape's missing pause control (WCAG 2.2.2), input attributes, heading balance, tap handling, an ASCII ellipsis, a hardcoded number format and brand translation. Kept on purpose: sentence-case headings (DESIGN.md) and tab state not mirrored in the URL.
+- Motion review: every animated property is transform, opacity or SVG pathLength after removing a border-color transition; architecture diagrams' entrance shortened from 1.0 s to 0.7 s. Chromium frame pacing over 3 s: idle p50 16.7 ms, p95 17.0 ms; while scrolling p50 16.7 ms, p95 16.9 ms; 0 frames over 33 ms. Tape toggle pauses the drift (`animation-play-state: paused`, `aria-pressed="true"`).
+- Code review (`/code-review high`, range `14227d1..HEAD`): 10 findings; 9 fixed (connection-slot race and leak, auth-failure throttling, distinct cluster token, stale data labelled Live after the broker sleeps, thrown poll errors not restarting, hosted-only wording, metadata refresh authenticating needlessly, this test-edit record), 1 kept (the cross-fade height lock leaves blank space on phones; it is what keeps the swap free of layout jumps).
+- The stale-Live fix checked in Chromium by stopping the broker after the page went live: restart at 25.8 s, recorded view 8 ms later, asleep at 115.8 s, console clean.
+
+### Not verified / assumed
+- Only Chromium; no real phone.
+
