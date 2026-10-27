@@ -92,10 +92,6 @@ public final class JsonLog {
     log(Level.ERROR, msg, t, kv);
   }
 
-  public boolean isDebugEnabled() {
-    return threshold.compareTo(Level.DEBUG) <= 0;
-  }
-
   private void log(Level level, String msg, Throwable t, Object... kv) {
     if (level.compareTo(threshold) < 0) {
       return;

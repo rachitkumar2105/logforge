@@ -101,8 +101,4 @@ public final class ProducerStateManager {
   public synchronized void clear() {
     producers.clear();
   }
-
-  public synchronized int producerCount() {
-    return producers.size();
-  }
 }

@@ -68,7 +68,6 @@ public final class NioServer implements Closeable {
   private final LongAdder bytesOut = new LongAdder();
   private final AtomicInteger openConnections = new AtomicInteger();
   private final AtomicInteger mutedConnections = new AtomicInteger();
-  private final AtomicInteger everMuted = new AtomicInteger();
   // SECURITY-AUDIT F2: caps on concurrent connections, counted from accept to close.
   private final AtomicInteger accepted = new AtomicInteger();
   private final java.util.concurrent.ConcurrentHashMap<java.net.InetAddress, AtomicInteger> perIp =
@@ -140,11 +139,6 @@ public final class NioServer implements Closeable {
 
   public int openConnections() {
     return openConnections.get();
-  }
-
-  /** Connections that have been muted by backpressure at least once. */
-  public int everMutedConnections() {
-    return everMuted.get();
   }
 
   public int mutedConnections() {
@@ -496,7 +490,6 @@ public final class NioServer implements Closeable {
       if (!c.muted && c.key.isValid()) {
         c.muted = true;
         mutedConnections.incrementAndGet();
-        everMuted.incrementAndGet();
         c.key.interestOps(c.key.interestOps() & ~SelectionKey.OP_READ);
       }
     }

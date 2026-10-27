@@ -84,10 +84,6 @@ public final class ReplicaFetcherManager implements FetcherControl, Closeable {
     this.paused = paused;
   }
 
-  public synchronized int fetcherCount() {
-    return fetchers.size();
-  }
-
   @Override
   public synchronized void close() {
     fetchers.values().forEach(ReplicaFetcher::shutdown);
