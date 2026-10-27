@@ -4,6 +4,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 import dev.logforge.log.RecordBatch;
 import dev.logforge.network.protocol.ApiKeys;
+import dev.logforge.network.protocol.Authenticate;
 import dev.logforge.network.protocol.Fetch;
 import dev.logforge.network.protocol.ListOffsets;
 import dev.logforge.network.protocol.Metadata;
@@ -30,8 +31,24 @@ public final class TestClient implements Closeable {
   private final DataInputStream in;
   private final OutputStream out;
   private int correlation = 0;
+  private final String clusterToken;
+  private boolean authenticated;
 
+  /**
+   * A client that authenticates with {@link TestNodes#CLUSTER_TOKEN} before topic administration,
+   * as the cluster's own tools do.
+   */
   public TestClient(String host, int port) throws IOException {
+    this(host, port, TestNodes.CLUSTER_TOKEN);
+  }
+
+  /** A client that never authenticates: what anyone on the network can do. */
+  public static TestClient anonymous(String host, int port) throws IOException {
+    return new TestClient(host, port, null);
+  }
+
+  private TestClient(String host, int port, String clusterToken) throws IOException {
+    this.clusterToken = clusterToken;
     socket = new Socket();
     socket.connect(new InetSocketAddress(host, port), 5_000);
     socket.setSoTimeout(30_000);
@@ -104,8 +121,23 @@ public final class TestClient implements Closeable {
         call(ApiKeys.METADATA, w -> new Metadata.Request(topics).write(w)));
   }
 
+  private void authenticateOnce() throws IOException {
+    if (clusterToken == null || authenticated) {
+      return;
+    }
+    short err =
+        Authenticate.Response.read(
+                call(ApiKeys.AUTHENTICATE, new Authenticate.Request(clusterToken)::write))
+            .errorCode();
+    if (err != 0) {
+      throw new IOException("authentication refused: " + err);
+    }
+    authenticated = true;
+  }
+
   public Topics.CreateResponse createTopic(
       String name, int partitions, int rf, Map<String, String> configs) throws IOException {
+    authenticateOnce();
     Topics.CreateRequest req =
         new Topics.CreateRequest(
             10_000, List.of(new Topics.NewTopic(name, partitions, (short) rf, configs)));

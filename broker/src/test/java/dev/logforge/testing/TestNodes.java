@@ -13,6 +13,9 @@ import java.util.function.BooleanSupplier;
 public final class TestNodes {
   private TestNodes() {}
 
+  /** The cluster token every test node is started with (SECURITY-AUDIT F1). */
+  public static final String CLUSTER_TOKEN = "test-cluster-token-0123456789abcdef";
+
   public static NodeConfig.Builder baseConfig(int nodeId, Path dataDir) {
     return NodeConfig.builder()
         .nodeId(nodeId)
@@ -20,6 +23,7 @@ public final class TestNodes {
         .advertisedHost("127.0.0.1")
         .dataDir(dataDir.resolve("node-" + nodeId))
         .adminListen(null)
+        .clusterToken(CLUSTER_TOKEN)
         .heartbeatIntervalMs(50)
         .brokerSessionTimeoutMs(1_500)
         .replicaLagTimeMaxMs(1_000)
