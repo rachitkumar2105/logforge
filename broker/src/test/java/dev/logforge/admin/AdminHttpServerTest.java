@@ -94,6 +94,25 @@ class AdminHttpServerTest {
   }
 
   @Test
+  void healthSaysOnlyThatTheNodeIsUpAndAnswersHead() throws Exception {
+    // SECURITY-AUDIT F5: the public endpoint reveals no node id, role or uptime.
+    HttpResponse<String> health = get("/health", null);
+    assertThat(health.statusCode()).isEqualTo(200);
+    assertThat(Json.parseObject(health.body())).isEqualTo(Map.of("status", "ok"));
+    // Uptime monitors often probe with HEAD.
+    assertThat(send("HEAD", "/health", null, null).statusCode()).isEqualTo(200);
+  }
+
+  @Test
+  void everyResponseAsksBrowsersToUseHttpsOnly() throws Exception {
+    // SECURITY-AUDIT F6: TLS ends at the platform edge; HSTS keeps browsers from plain HTTP.
+    assertThat(get("/health", null).headers().firstValue("Strict-Transport-Security"))
+        .hasValueSatisfying(v -> assertThat(v).startsWith("max-age="));
+    assertThat(get("/api/v1/cluster", null).headers().firstValue("Strict-Transport-Security"))
+        .isPresent();
+  }
+
+  @Test
   void healthIsPublicEverythingElseNeedsAToken() throws Exception {
     HttpResponse<String> health = get("/health", null);
     assertThat(health.statusCode()).isEqualTo(200);
