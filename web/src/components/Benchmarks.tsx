@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { BenchResult } from "@/lib/types";
+import { classify, noiseFactor } from "@/lib/benchReading";
 import { fixed, int, ms, recordSize } from "@/lib/format";
 
 type Dimension = "recordSize" | "acks" | "partitions" | "fsync";
@@ -247,6 +248,7 @@ const COMPARED: [string, string][] = [
   ["acks-all", "acks=all"],
   ["partitions-1", "1 partition"],
   ["partitions-16", "16 partitions"],
+  ["fsync-ms-1000", "fsync every 1 s"],
   ["fsync-records-1", "fsync every batch"],
 ];
 
@@ -258,14 +260,24 @@ function ratio(find: (s: string, l: string) => BenchResult | undefined, label: s
 }
 
 function Reading({ find }: { find: (s: string, l: string) => BenchResult | undefined }) {
-  const mb = (s: string, l: string) => fixed(find(s, l)?.results.mbPerSec, 1);
-  const rows = COMPARED.map(([label, name]) => ({ label, name, r: ratio(find, label) })).filter(
-    (x): x is { label: string; name: string; r: number } => x.r !== undefined,
-  );
+  const mbv = (s: string, l: string) => find(s, l)?.results.mbPerSec;
+  const mb = (s: string, l: string) => fixed(mbv(s, l), 1);
+  // The 1 KB baseline and the fsync never run are the same configuration measured minutes apart.
+  const pairs = (["logforge", "kafka"] as const)
+    .map((s) => [mbv(s, "baseline-1KB"), mbv(s, "fsync-never")])
+    .filter((p): p is [number, number] => p[0] !== undefined && p[1] !== undefined);
+  const noise = noiseFactor(pairs);
+  const rows = COMPARED.map(([label, name]) => ({ label, name, r: ratio(find, label) }))
+    .filter((x): x is { label: string; name: string; r: number } => x.r !== undefined)
+    .map((x) => ({ ...x, verdict: classify(x.r, noise) }));
+  const kafkaAhead = rows.filter((x) => x.verdict === "kafka").map((x) => x.name);
+  const logforgeAhead = rows.filter((x) => x.verdict === "logforge").map((x) => x.name);
   const e2eLf = find("logforge", "e2e-acks-all")?.results.ackToReceiveMs?.p50;
   const e2eK = find("kafka", "e2e-acks-all")?.results.ackToReceiveMs?.p50;
+  const e2eGap = e2eLf !== undefined && e2eK !== undefined && e2eK > 0 ? e2eLf / e2eK : undefined;
+  const list = (xs: string[]) => (xs.length ? xs.join(", ") : "none");
   return (
-    <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_20rem]">
+    <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_22rem]">
       <div className="max-w-3xl space-y-4 text-sm leading-relaxed">
         <p className="label">Reading the comparison</p>
         <p>
@@ -274,23 +286,28 @@ function Reading({ find }: { find: (s: string, l: string) => BenchResult | undef
           <span className="mono">{mb("logforge", "baseline-1KB")}</span> and{" "}
           <span className="mono">{mb("logforge", "fsync-never")}</span> MB/s, Kafka{" "}
           <span className="mono">{mb("kafka", "baseline-1KB")}</span> and{" "}
-          <span className="mono">{mb("kafka", "fsync-never")}</span> MB/s. On a shared laptop a gap smaller than
-          that spread is not evidence of anything.
+          <span className="mono">{mb("kafka", "fsync-never")}</span> MB/s: runs of one configuration differ by up to{" "}
+          <span className="mono">{fixed(noise, 2)}&times;</span> on this shared laptop. Only gaps beyond that count.
         </p>
         <p>
-          <strong>Where Kafka pulls ahead</strong> (replicated writes at acks=all, a single partition, large
-          records, and handing acknowledged records to a consumer), the likely causes are known from the code,
-          not from profiling. The LogForge producer keeps one request in flight per partition, where Kafka
-          pipelines up to five per connection. Followers and consumers get bytes copied through the JVM heap,
-          not sent from the page cache with sendfile. And the LogForge consumer waits for every leader&apos;s
-          fetch to return before handing any records over, so one long poll delays the rest: acknowledged
-          records reached the consumer after a median <span className="mono">{ms(e2eLf)}</span> against
-          Kafka&apos;s <span className="mono">{ms(e2eK)}</span>.
+          <strong>Beyond the noise.</strong> Kafka ahead: {list(kafkaAhead)}. LogForge ahead: {list(logforgeAhead)}.
+          Every other row is within the noise and says nothing either way.
+          {e2eGap !== undefined ? (
+            <>
+              {" "}
+              Acknowledged records reached a consumer after a median <span className="mono">{ms(e2eLf)}</span> on
+              LogForge against <span className="mono">{ms(e2eK)}</span> on Kafka.
+            </>
+          ) : null}
         </p>
         <p>
-          <strong>Where LogForge is level or ahead</strong>, read it as both clusters waiting on the same single
-          producer and the same machine rather than as a faster broker. Kafka has had a decade of tuning; the
-          point of this table is that the gap is measured and explained, not hidden.
+          <strong>Likely causes, from the code, not from profiling.</strong> The LogForge producer keeps one request
+          in flight per partition, where Kafka pipelines up to five per connection, which matters most for small
+          records. Followers and consumers get bytes copied through the JVM heap, not sent from the page cache with
+          sendfile. And the LogForge consumer waits for every leader&apos;s fetch to return before handing any
+          records over, so one long poll delays the rest: that is the end-to-end gap. One run per configuration
+          gives no error bars; Kafka has had a decade of tuning, and the point of this section is that the gap is
+          measured and explained, not hidden.
         </p>
       </div>
       <div className="panel self-start p-4">
@@ -301,6 +318,9 @@ function Reading({ find }: { find: (s: string, l: string) => BenchResult | undef
               <tr key={x.label}>
                 <th scope="row" className="font-normal">{x.name}</th>
                 <td className="num">{fixed(x.r, 2)}&times;</td>
+                <td className="text-muted">
+                  {x.verdict === "within" ? "within noise" : x.verdict === "kafka" ? "Kafka ahead" : "LogForge ahead"}
+                </td>
               </tr>
             ))}
           </tbody>
