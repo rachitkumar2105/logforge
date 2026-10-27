@@ -581,12 +581,11 @@ public final class Node implements AutoCloseable {
       return;
     }
     closed = true;
-    if (scheduler != null) {
-      scheduler.shutdownNow();
-    }
-    if (heartbeatThread != null) {
-      heartbeatThread.shutdownNow();
-    }
+    // Stop and wait for background work first: a heartbeat applying metadata, or a retention or
+    // compaction task, must not open or touch a log after the logs are closed below (on Windows a
+    // log reopened that late left its files locked).
+    stopAndAwait(scheduler);
+    stopAndAwait(heartbeatThread);
     if (admin != null) {
       admin.close();
     }
@@ -599,9 +598,7 @@ public final class Node implements AutoCloseable {
     if (replicaManager != null) {
       replicaManager.close();
     }
-    if (handlerPool != null) {
-      handlerPool.shutdownNow();
-    }
+    stopAndAwait(handlerPool);
     if (logManager != null) {
       logManager.close();
     }
@@ -609,5 +606,19 @@ public final class Node implements AutoCloseable {
       controllerChannel.close();
     }
     LOG.info("node stopped");
+  }
+
+  private static void stopAndAwait(java.util.concurrent.ExecutorService executor) {
+    if (executor == null) {
+      return;
+    }
+    executor.shutdownNow();
+    try {
+      if (!executor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
+        LOG.warn("background threads still running at shutdown");
+      }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    }
   }
 }
