@@ -10,6 +10,7 @@ import { Replay } from "@/components/Replay";
 import { SegmentExplorer } from "@/components/SegmentExplorer";
 import { Footer, Header, REPO_URL } from "@/components/SiteChrome";
 import { Topology } from "@/components/Topology";
+import { fixed } from "@/lib/format";
 import type { BenchResult, ChaosResult, Replay as ReplayData, SegmentSample } from "@/lib/types";
 
 // Rendered per request so the CSP nonce applies. Nothing here waits for the broker: the live
@@ -76,7 +77,7 @@ function ChaosTable({ results }: { results: ChaosResult[] }) {
                     <td className="num">{new Intl.NumberFormat("en-US").format(r.acked)}</td>
                     <td className={`num ${r.missingAcked > 0 ? "text-fail" : ""}`}>{r.missingAcked}</td>
                     <td className="num">{r.duplicates}</td>
-                    <td className="num">{(r.recoveryTimeMs / 1000).toFixed(2)} s</td>
+                    <td className="num">{fixed(r.recoveryTimeMs / 1000, 2)} s</td>
                     <td className={r.verdict === "PASS" ? "text-accent" : "text-fail"}>{r.verdict}</td>
                   </tr>
                 ))}

@@ -1,5 +1,6 @@
 import type { BenchResult } from "@/lib/types";
 import { fixed, int, recordSize } from "@/lib/format";
+import { TapeToggle } from "./TapeToggle";
 
 /** The partition tape: record batches of varying width drifting along an offset rail. */
 function TapeBackground() {
@@ -54,9 +55,10 @@ export function Hero({ headline }: { headline: BenchResult | undefined }) {
   return (
     <section aria-labelledby="hero-title" className="relative overflow-hidden border-b border-line">
       <TapeBackground />
+      <TapeToggle />
       <div className="wrap relative pt-16 pb-44 md:pt-24 md:pb-52">
         <p className="label mb-6">Distributed commit log / Java 21 / no Kafka libraries in the broker</p>
-        <h1 id="hero-title" className="h1 max-w-4xl">
+        <h1 id="hero-title" className="h1 max-w-4xl" translate="no">
           LogForge
         </h1>
         <p className="mt-6 max-w-2xl text-muted">

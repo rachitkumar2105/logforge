@@ -68,7 +68,10 @@ export function SegmentExplorer({ sample }: { sample: SegmentSample }) {
           <label className="grid gap-1">
             <span className="label">offset (0 to {int(end - 1)})</span>
             <input
+              name="offset"
               inputMode="numeric"
+              autoComplete="off"
+              spellCheck={false}
               value={input}
               onChange={(e) => setInput(e.target.value.replace(/[^0-9]/g, ""))}
               className="mono min-h-[44px] w-40 rounded-md border border-line bg-panel-2 px-3 text-text"
@@ -174,7 +177,7 @@ export function SegmentExplorer({ sample }: { sample: SegmentSample }) {
                     {scanStep?.kind === "scan" ? scanStep.visited.length : 0} header reads.
                   </>
                 ) : (
-                  <span className="text-muted">looking up...</span>
+                  <span className="text-muted">looking up…</span>
                 )}
               </p>
             </div>

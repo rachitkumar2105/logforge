@@ -78,6 +78,7 @@ table {
   line-height: 1.02;
   letter-spacing: -0.035em;
   font-weight: 600;
+  text-wrap: balance;
 }
 
 .h2 {
@@ -85,12 +86,14 @@ table {
   line-height: 1.1;
   letter-spacing: -0.02em;
   font-weight: 600;
+  text-wrap: balance;
 }
 
 .h3 {
   font-size: clamp(1.1rem, 1rem + 0.4vw, 1.3rem);
   line-height: 1.25;
   font-weight: 600;
+  text-wrap: balance;
 }
 
 .label {
@@ -156,6 +159,8 @@ a:hover {
 }
 
 .btn {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -242,6 +247,10 @@ details > summary {
 
 .drift {
   animation: drift 40s linear infinite;
+}
+
+:root[data-tape-paused] .drift {
+  animation-play-state: paused;
 }
 
 /* Cold-start pill on the live topology. Transform and opacity only. */

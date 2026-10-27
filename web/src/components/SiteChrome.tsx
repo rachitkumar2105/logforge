@@ -7,7 +7,7 @@ export function Header() {
   return (
     <header className="border-b border-line">
       <nav aria-label="Primary" className="wrap flex min-h-14 flex-wrap items-center gap-x-6 gap-y-2 py-2">
-        <Link href="/" className="mono text-sm font-semibold text-text no-underline">
+        <Link href="/" className="mono text-sm font-semibold text-text no-underline" translate="no">
           logforge
         </Link>
         <ul className="ml-auto flex flex-wrap gap-x-5 gap-y-1 text-sm">
