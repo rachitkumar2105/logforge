@@ -95,4 +95,4 @@ Both are server-side only. Never prefix them with `NEXT_PUBLIC_`, and never give
 
 ## Limitations
 
-A single fixed controller (no consensus), no authentication or TLS on the binary protocol (run it on a private network), no zero-copy, no compression, no transactions. The full list is on the site and in `docs/DECISIONS.md`.
+A single fixed controller (no consensus), no TLS on the binary protocol and only a shared cluster token for cluster operations (producers and consumers need none; run it on a private network), no zero-copy, no compression, no transactions. The full list is on the site and in `docs/DECISIONS.md`.

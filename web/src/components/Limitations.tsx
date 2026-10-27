@@ -7,9 +7,9 @@ const ITEMS: { title: string; body: string }[] = [
       "Cluster metadata lives on a single controller node. If it is down, brokers keep serving with the metadata they have, but nothing can elect a new leader, change an ISR or create a topic until it returns. Kafka replicates its metadata with Raft (KRaft); LogForge deliberately does not.",
   },
   {
-    title: "No authentication or encryption on the broker protocol",
+    title: "No encryption, and only a shared token, on the broker protocol",
     body:
-      "Anyone who can reach port 9092 can produce, consume, and even create or delete topics. The cluster is only safe on a private network, which is how the Compose file runs it. The admin HTTP API is token-protected and is the only thing exposed.",
+      "Creating or deleting topics, registering a broker, changing an ISR and replicating need a shared cluster token, but producing and consuming need nothing, and the token itself crosses the network in clear text. The cluster is only safe on a private network, which is how Compose and Render run it. The token-protected admin HTTP API is the only thing exposed.",
   },
   {
     title: "Slower data path than Kafka by design",

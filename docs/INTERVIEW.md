@@ -80,7 +80,7 @@ Each connection keeps a FIFO of responses in request order. When it holds 16 pen
 
 ### 19. How are hostile frames handled?
 
-The 4-byte size is checked before any allocation (a 2 GiB claim costs nothing); array counts are bounded by the bytes left; any parse error closes only that connection; fetch responses are capped at 8 MiB regardless of what the client asks (`ProtocolReader`, `NioServer`, `SecurityLimitsTest`). The binary protocol has no authentication, which is why it must stay on a private network (SECURITY-AUDIT.md F1).
+The 4-byte size is checked before any allocation (a 2 GiB claim costs nothing); array counts are bounded by the bytes left; any parse error closes only that connection; fetch responses are capped at 8 MiB regardless of what the client asks (`ProtocolReader`, `NioServer`, `SecurityLimitsTest`). The cluster's own operations (topic administration, broker registration, ISR changes, follower fetches) need the cluster token, presented once per connection with Authenticate and compared in constant time; three wrong tokens close the connection, and accept caps connections per address and in total (`ClusterAuthTest`, `ConnectionLimitsTest`, SECURITY-AUDIT F1 and F2). The token is not encryption, so port 9092 still stays on a private network.
 
 ### 20. Why is LogForge slower or faster than Kafka in the benchmark, and how do you know the comparison is fair?
 
