@@ -61,10 +61,12 @@ public interface ControllerChannel extends Closeable {
    * every call times out within {@code timeoutMs}, so a caller that gives up never leaves a backlog
    * of stale requests queued behind a hung one.
    */
-  static ControllerChannel remote(String host, int port, int brokerId, int timeoutMs) {
+  static ControllerChannel remote(
+      String host, int port, int brokerId, int timeoutMs, String clusterToken) {
     BlockingChannel heartbeats =
-        new BlockingChannel(host, port, "broker-" + brokerId + "-hb", timeoutMs);
-    BlockingChannel control = new BlockingChannel(host, port, "broker-" + brokerId, timeoutMs);
+        new BlockingChannel(host, port, "broker-" + brokerId + "-hb", timeoutMs, clusterToken);
+    BlockingChannel control =
+        new BlockingChannel(host, port, "broker-" + brokerId, timeoutMs, clusterToken);
     ExecutorService hbExec = Executors.newSingleThreadExecutor(daemon("logforge-controller-hb"));
     ExecutorService ctlExec =
         Executors.newSingleThreadExecutor(daemon("logforge-controller-client"));

@@ -290,6 +290,8 @@ class ReplicationTest {
         assertThat(c.fetch(follower, epoch, "epoch", 0, 0, 0).errorCode())
             .isEqualTo(Errors.NONE.code());
       }
+      // The follower must know the partition, or it answers UNKNOWN_TOPIC_OR_PARTITION instead.
+      TestNodes.awaitTrue(() -> cluster.broker(follower).hasPartition("epoch", 0), WAIT);
       try (TestClient f = cluster.clientFor(follower)) {
         assertThat(f.fetch("epoch", 0, 0, 0).errorCode())
             .isEqualTo(Errors.NOT_LEADER_OR_FOLLOWER.code());

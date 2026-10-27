@@ -52,7 +52,7 @@ final class ChaosClient {
     int size = Math.max(8, Integer.parseInt(a.getOrDefault("size", "8")));
     // --rf 1 drives a single-node broker (the hosted-mode memory test); chaos runs use 3.
     int rf = Integer.parseInt(a.getOrDefault("rf", "3"));
-    try (Admin admin = new Admin(bootstrap, 60_000)) {
+    try (Admin admin = new Admin(bootstrap, 60_000, Main.clusterToken())) {
       admin.createTopic(
           topic, partitions, rf, Map.of("min.insync.replicas", Integer.toString(Math.min(2, rf))));
     }

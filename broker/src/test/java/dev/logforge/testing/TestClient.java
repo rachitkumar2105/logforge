@@ -177,6 +177,9 @@ public final class TestClient implements Closeable {
   public Fetch.PartitionResult fetch(
       int replicaId, int leaderEpoch, String topic, int partition, long offset, int maxWaitMs)
       throws IOException {
+    if (replicaId >= 0) {
+      authenticateOnce(); // a follower fetch is a cluster operation (F1)
+    }
     Fetch.Request req =
         new Fetch.Request(
             replicaId,

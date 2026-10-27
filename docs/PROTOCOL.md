@@ -151,6 +151,7 @@ Response: int32 size | int32 correlationId | body
 | 26 | `UNKNOWN_LEADER_EPOCH` | yes | Requester's leader epoch is newer than the broker's (broker metadata is behind). |
 | 27 | `BROKER_NOT_AVAILABLE` | yes | |
 | 28 | `UNKNOWN_SERVER_ERROR` | | Unexpected failure; details are only in the broker log. |
+| 29 | `CLUSTER_AUTHORIZATION_FAILED` | | The connection has not presented the cluster token (Authenticate, 5.17), or presented a wrong one. |
 
 ---
 
@@ -176,6 +177,7 @@ Notation: fields are listed in wire order. `[ ... ]` is `array`.
 | 13 | OffsetForLeaderEpoch | partition leader (followers only) |
 | 100 | BrokerHeartbeat | controller (internal) |
 | 101 | AlterIsr | controller (internal) |
+| 102 | Authenticate | any node |
 
 ### 5.0 Produce (0)
 
@@ -416,6 +418,18 @@ Response: `topics [ name string, partitions [ partition int32, errorCode int16, 
 Accepted only from the current leader at the current `leaderEpoch` and `partitionEpoch`; `newIsr` must include the leader and only replicas; added members must be alive. On success `partitionEpoch` increments.
 
 ---
+
+### 5.17 Authenticate (102)
+
+Request: `token` string. Response: `errorCode` int16 (`NONE` or `CLUSTER_AUTHORIZATION_FAILED`).
+
+Proves that a connection belongs to the cluster by presenting the shared cluster token (`LOGFORGE_CLUSTER_TOKEN`, at least 24 characters, required at startup). The broker compares it in constant time and never logs it. A successful Authenticate marks the connection for its lifetime; a wrong token leaves it unmarked. On an unmarked connection the broker answers these requests with `CLUSTER_AUTHORIZATION_FAILED` and does nothing else:
+
+- CreateTopics, DeleteTopics (per topic)
+- BrokerHeartbeat, AlterIsr (internal)
+- OffsetForLeaderEpoch and any Fetch with `replicaId >= 0` (follower replication, per partition)
+
+Produce, consumer Fetch (`replicaId = -1`), ListOffsets, Metadata, InitProducerId and the group APIs need no token. Brokers, the controller channel, replica fetchers, the admin client and the startup seeder authenticate right after every (re)connect. The token is not encryption: anyone who can watch traffic on the cluster network can read it, so the network must stay private (SECURITY-AUDIT F1).
 
 ## 5.16 Partitioning (client side)
 

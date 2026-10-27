@@ -20,7 +20,8 @@ mkdir -p "$WORK"
 MOUNT="$WORK"; command -v cygpath >/dev/null 2>&1 && MOUNT="$(cygpath -w "$WORK")"
 rm -f "$WORK/demo.stop"
 docker rm -f demo-producer >/dev/null 2>&1 || true
-docker run -d --name demo-producer --network logforge_cluster -v "$MOUNT:/work" logforge-bench \
+docker run -d --name demo-producer --network logforge_cluster -v "$MOUNT:/work" \
+  -e LOGFORGE_CLUSTER_TOKEN logforge-bench \
   chaos-produce --bootstrap broker1:9092,broker2:9092,broker3:9092 --topic demo-orders \
   --acks /work/demo.acks --stop /work/demo.stop --rate 500 --partitions 3 --size 256 >/dev/null
 sleep 20

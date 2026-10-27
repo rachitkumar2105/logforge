@@ -15,6 +15,7 @@ final class EmbeddedNode {
     Node node =
         Node.start(
             NodeConfig.builder()
+                .clusterToken(TestToken.VALUE)
                 .nodeId(0)
                 .roles(EnumSet.of(NodeConfig.Role.BROKER, NodeConfig.Role.CONTROLLER))
                 .listen("127.0.0.1", 0)

@@ -21,6 +21,7 @@ final class ClientMetadata implements Closeable {
   record Address(String host, int port) {}
 
   private final List<Address> bootstrap = new ArrayList<>();
+  private final String clusterToken;
   private final String clientId;
   private final int requestTimeoutMs;
   private final Map<Integer, Address> brokers = new ConcurrentHashMap<>();
@@ -30,6 +31,16 @@ final class ClientMetadata implements Closeable {
   private volatile int controllerId = -1;
 
   ClientMetadata(String bootstrapServers, String clientId, int requestTimeoutMs) {
+    this(bootstrapServers, clientId, requestTimeoutMs, null);
+  }
+
+  /**
+   * @param clusterToken if not null, every connection authenticates with it (needed for topic
+   *     administration, SECURITY-AUDIT F1)
+   */
+  ClientMetadata(
+      String bootstrapServers, String clientId, int requestTimeoutMs, String clusterToken) {
+    this.clusterToken = clusterToken;
     for (String s : bootstrapServers.split(",")) {
       String hp = s.trim();
       if (hp.isEmpty()) {
@@ -54,7 +65,8 @@ final class ClientMetadata implements Closeable {
     candidates.addAll(bootstrap);
     IOException last = null;
     for (Address a : candidates) {
-      BlockingChannel ch = new BlockingChannel(a.host(), a.port(), clientId, requestTimeoutMs);
+      BlockingChannel ch =
+          new BlockingChannel(a.host(), a.port(), clientId, requestTimeoutMs, clusterToken);
       try {
         Metadata.Response md =
             Metadata.Response.read(
@@ -153,7 +165,9 @@ final class ClientMetadata implements Closeable {
       ch =
           channels.computeIfAbsent(
               nodeId,
-              id -> new BlockingChannel(addr.host(), addr.port(), clientId, requestTimeoutMs));
+              id ->
+                  new BlockingChannel(
+                      addr.host(), addr.port(), clientId, requestTimeoutMs, clusterToken));
     }
     return ch;
   }
@@ -168,7 +182,7 @@ final class ClientMetadata implements Closeable {
     if (a == null) {
       throw new ClientException(Errors.BROKER_NOT_AVAILABLE, "unknown broker " + nodeId);
     }
-    return new BlockingChannel(a.host(), a.port(), clientId, requestTimeoutMs);
+    return new BlockingChannel(a.host(), a.port(), clientId, requestTimeoutMs, clusterToken);
   }
 
   /**

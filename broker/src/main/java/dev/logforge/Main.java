@@ -25,7 +25,7 @@ public final class Main {
           new Thread(
               () -> {
                 try {
-                  Seeder.seed("127.0.0.1", node.port(), spec);
+                  Seeder.seed("127.0.0.1", node.port(), spec, config.clusterToken);
                 } catch (Exception e) {
                   LOG.error("seeding failed", e);
                 }

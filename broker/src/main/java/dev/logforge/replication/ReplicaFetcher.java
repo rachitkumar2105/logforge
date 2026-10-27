@@ -59,6 +59,7 @@ final class ReplicaFetcher extends Thread {
   private final BooleanSupplier paused;
   private final int maxWaitMs;
   private final int maxBytes;
+  private final String clusterToken;
   private final Map<TopicPartition, State> partitions = new LinkedHashMap<>();
   private BlockingChannel channel;
   private int consecutiveFailures;
@@ -71,8 +72,10 @@ final class ReplicaFetcher extends Thread {
       IntFunction<InetSocketAddress> addressOf,
       BooleanSupplier paused,
       int maxWaitMs,
-      int maxBytes) {
+      int maxBytes,
+      String clusterToken) {
     super("logforge-fetcher-" + leaderId);
+    this.clusterToken = clusterToken;
     setDaemon(true);
     this.localId = localId;
     this.leaderId = leaderId;
@@ -202,7 +205,11 @@ final class ReplicaFetcher extends Thread {
       }
       channel =
           new BlockingChannel(
-              addr.getHostString(), addr.getPort(), "replica-" + localId, maxWaitMs + 10_000);
+              addr.getHostString(),
+              addr.getPort(),
+              "replica-" + localId,
+              maxWaitMs + 10_000,
+              clusterToken);
     }
     return channel;
   }

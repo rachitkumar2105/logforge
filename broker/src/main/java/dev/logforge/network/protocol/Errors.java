@@ -30,7 +30,8 @@ public enum Errors {
   FENCED_LEADER_EPOCH(25, true),
   UNKNOWN_LEADER_EPOCH(26, true),
   BROKER_NOT_AVAILABLE(27, true),
-  UNKNOWN_SERVER_ERROR(28, false);
+  UNKNOWN_SERVER_ERROR(28, false),
+  CLUSTER_AUTHORIZATION_FAILED(29, false);
 
   private final short code;
   private final boolean retriable;

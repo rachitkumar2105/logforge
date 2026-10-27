@@ -59,6 +59,7 @@ class ProducerRetryDedupTest {
         Node node =
             Node.start(
                 NodeConfig.builder()
+                    .clusterToken(TestToken.VALUE)
                     .nodeId(0)
                     .roles(EnumSet.of(NodeConfig.Role.BROKER, NodeConfig.Role.CONTROLLER))
                     .listen("127.0.0.1", proxyTarget)
@@ -73,7 +74,7 @@ class ProducerRetryDedupTest {
         Thread.sleep(10);
       }
       String bootstrap = "127.0.0.1:" + proxy.port();
-      try (Admin admin = new Admin(bootstrap)) {
+      try (Admin admin = new Admin(bootstrap, TestToken.VALUE)) {
         admin.createTopic(topic, 1, 1, Map.of());
       }
       try (Producer p =

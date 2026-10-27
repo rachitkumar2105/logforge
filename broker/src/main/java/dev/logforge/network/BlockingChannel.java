@@ -1,5 +1,8 @@
 package dev.logforge.network;
 
+import dev.logforge.network.protocol.ApiKeys;
+import dev.logforge.network.protocol.Authenticate;
+import dev.logforge.network.protocol.Errors;
 import dev.logforge.network.protocol.ProtocolReader;
 import dev.logforge.network.protocol.ProtocolWriter;
 import dev.logforge.network.protocol.RequestHeader;
@@ -25,12 +28,23 @@ public final class BlockingChannel implements Closeable {
   private final int port;
   private final String clientId;
   private final int timeoutMs;
+  private final String clusterToken;
   private Socket socket;
   private DataInputStream in;
   private DataOutputStream out;
   private int correlation;
 
   public BlockingChannel(String host, int port, String clientId, int timeoutMs) {
+    this(host, port, clientId, timeoutMs, null);
+  }
+
+  /**
+   * @param clusterToken if not null, the channel sends Authenticate with it right after each
+   *     (re)connect, so cluster operations work on it (SECURITY-AUDIT F1)
+   */
+  public BlockingChannel(
+      String host, int port, String clientId, int timeoutMs, String clusterToken) {
+    this.clusterToken = clusterToken;
     this.host = host;
     this.port = port;
     this.clientId = clientId;
@@ -56,6 +70,16 @@ public final class BlockingChannel implements Closeable {
     socket = s;
     in = new DataInputStream(new BufferedInputStream(s.getInputStream(), 64 * 1024));
     out = new DataOutputStream(new BufferedOutputStream(s.getOutputStream(), 64 * 1024));
+    if (clusterToken != null) {
+      short err =
+          Authenticate.Response.read(
+                  exchange(ApiKeys.AUTHENTICATE, new Authenticate.Request(clusterToken)::write))
+              .errorCode();
+      if (err != Errors.NONE.code()) {
+        disconnect();
+        throw new IOException("cluster authentication refused by " + host + ":" + port);
+      }
+    }
   }
 
   private int writeFrame(short apiKey, Consumer<ProtocolWriter> body) throws IOException {
@@ -76,23 +100,28 @@ public final class BlockingChannel implements Closeable {
       throws IOException {
     try {
       ensureConnected();
-      int corr = writeFrame(apiKey, body);
-      int size = in.readInt();
-      if (size < 4 || size > 256 * 1024 * 1024) {
-        throw new IOException("bad response size " + size);
-      }
-      byte[] bytes = new byte[size];
-      in.readFully(bytes);
-      ByteBuffer buf = ByteBuffer.wrap(bytes);
-      int got = buf.getInt();
-      if (got != corr) {
-        throw new IOException("correlation mismatch: sent " + corr + ", got " + got);
-      }
-      return new ProtocolReader(buf);
+      return exchange(apiKey, body);
     } catch (IOException e) {
       disconnect();
       throw e;
     }
+  }
+
+  /** Writes one request on the open socket and reads its response. */
+  private ProtocolReader exchange(short apiKey, Consumer<ProtocolWriter> body) throws IOException {
+    int corr = writeFrame(apiKey, body);
+    int size = in.readInt();
+    if (size < 4 || size > 256 * 1024 * 1024) {
+      throw new IOException("bad response size " + size);
+    }
+    byte[] bytes = new byte[size];
+    in.readFully(bytes);
+    ByteBuffer buf = ByteBuffer.wrap(bytes);
+    int got = buf.getInt();
+    if (got != corr) {
+      throw new IOException("correlation mismatch: sent " + corr + ", got " + got);
+    }
+    return new ProtocolReader(buf);
   }
 
   /** Like {@link #request} but wraps IO failures in {@link UncheckedIOException}. */

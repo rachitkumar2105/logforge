@@ -24,6 +24,7 @@ class HostedModeTest {
     m.put("LOGFORGE_NODE_ID", "1");
     m.put("LOGFORGE_DATA_DIR", dir.toString());
     m.put("LOGFORGE_ADMIN_TOKEN", "a".repeat(32));
+    m.put("LOGFORGE_CLUSTER_TOKEN", TestNodes.CLUSTER_TOKEN);
     m.put("LOGFORGE_READ_TOKEN", "r".repeat(32));
     for (int i = 0; i < kv.length; i += 2) {
       m.put(kv[i], kv[i + 1]);
@@ -67,9 +68,10 @@ class HostedModeTest {
   void theSeederCreatesTheTopicAndWritesTheRecordsExactlyOnce() throws Exception {
     try (Node node = TestNodes.single(dir)) {
       Seeder.Spec spec = new Seeder.Spec("demo-orders", 3, 600);
-      assertThat(Seeder.seed("127.0.0.1", node.port(), spec)).isEqualTo(600);
+      assertThat(Seeder.seed("127.0.0.1", node.port(), spec, TestNodes.CLUSTER_TOKEN))
+          .isEqualTo(600);
       // A second run (a restart that kept its disk) finds the topic and writes nothing.
-      assertThat(Seeder.seed("127.0.0.1", node.port(), spec)).isZero();
+      assertThat(Seeder.seed("127.0.0.1", node.port(), spec, TestNodes.CLUSTER_TOKEN)).isZero();
 
       long total = 0;
       try (TestClient c = new TestClient("127.0.0.1", node.port())) {

@@ -4,6 +4,7 @@ import dev.logforge.controller.Controller;
 import dev.logforge.log.ProducerIdManager;
 import dev.logforge.network.RequestHandler;
 import dev.logforge.network.protocol.ApiKeys;
+import dev.logforge.network.protocol.Authenticate;
 import dev.logforge.network.protocol.ControllerApis;
 import dev.logforge.network.protocol.Errors;
 import dev.logforge.network.protocol.Fetch;
@@ -45,13 +46,16 @@ final class BrokerApis implements RequestHandler {
   private final ReplicaManager replicaManager;
   private final Supplier<ControllerApis.Snapshot> metadata;
   private final ProducerIdManager producerIds;
+  private final byte[] clusterToken;
   private volatile GroupApis groups;
 
   BrokerApis(
       Controller controller,
       ReplicaManager replicaManager,
       Supplier<ControllerApis.Snapshot> metadata,
-      ProducerIdManager producerIds) {
+      ProducerIdManager producerIds,
+      String clusterToken) {
+    this.clusterToken = clusterToken.getBytes(java.nio.charset.StandardCharsets.UTF_8);
     this.controller = controller;
     this.replicaManager = replicaManager;
     this.metadata = metadata;
@@ -78,20 +82,42 @@ final class BrokerApis implements RequestHandler {
   @Override
   public CompletableFuture<ByteBuffer> handle(Context ctx, ProtocolReader body) {
     short key = ctx.header().apiKey();
+    // SECURITY-AUDIT F1: the cluster's own operations need a connection that presented the token.
+    boolean member = ctx.session().isClusterMember();
     return switch (key) {
+      case ApiKeys.AUTHENTICATE -> authenticate(ctx, parse(body, Authenticate.Request::read));
       case ApiKeys.PRODUCE -> produce(parse(body, Produce.Request::read));
-      case ApiKeys.FETCH -> fetch(parse(body, Fetch.Request::read));
+      case ApiKeys.FETCH -> {
+        Fetch.Request req = parse(body, Fetch.Request::read);
+        yield req.isFromFollower() && !member ? done(refuseFetch(req)::write) : fetch(req);
+      }
       case ApiKeys.LIST_OFFSETS -> listOffsets(parse(body, ListOffsets.Request::read));
       case ApiKeys.METADATA -> done(metadata(parse(body, Metadata.Request::read))::write);
-      case ApiKeys.CREATE_TOPICS -> createTopics(parse(body, Topics.CreateRequest::read));
-      case ApiKeys.DELETE_TOPICS -> deleteTopics(parse(body, Topics.DeleteRequest::read));
+      case ApiKeys.CREATE_TOPICS -> {
+        Topics.CreateRequest req = parse(body, Topics.CreateRequest::read);
+        yield member ? createTopics(req) : done(refuseCreate(req, UNAUTHORIZED)::write);
+      }
+      case ApiKeys.DELETE_TOPICS -> {
+        Topics.DeleteRequest req = parse(body, Topics.DeleteRequest::read);
+        yield member ? deleteTopics(req) : done(refuseDelete(req, UNAUTHORIZED)::write);
+      }
       case ApiKeys.INIT_PRODUCER_ID ->
           initProducerId(parse(body, Replication.InitProducerIdRequest::read));
-      case ApiKeys.OFFSET_FOR_LEADER_EPOCH ->
-          offsetForLeaderEpoch(parse(body, Replication.OffsetForLeaderEpochRequest::read));
-      case ApiKeys.BROKER_HEARTBEAT ->
-          brokerHeartbeat(parse(body, ControllerApis.HeartbeatRequest::read));
-      case ApiKeys.ALTER_ISR -> alterIsr(parse(body, ControllerApis.AlterIsrRequest::read));
+      case ApiKeys.OFFSET_FOR_LEADER_EPOCH -> {
+        Replication.OffsetForLeaderEpochRequest req =
+            parse(body, Replication.OffsetForLeaderEpochRequest::read);
+        yield member ? offsetForLeaderEpoch(req) : done(refuseEpochs(req)::write);
+      }
+      case ApiKeys.BROKER_HEARTBEAT -> {
+        ControllerApis.HeartbeatRequest req = parse(body, ControllerApis.HeartbeatRequest::read);
+        yield member
+            ? brokerHeartbeat(req)
+            : done(new ControllerApis.HeartbeatResponse(UNAUTHORIZED.code(), -1, null)::write);
+      }
+      case ApiKeys.ALTER_ISR -> {
+        ControllerApis.AlterIsrRequest req = parse(body, ControllerApis.AlterIsrRequest::read);
+        yield member ? alterIsr(req) : done(refuseAlterIsr(req, UNAUTHORIZED)::write);
+      }
       case ApiKeys.FIND_COORDINATOR,
               ApiKeys.JOIN_GROUP,
               ApiKeys.HEARTBEAT,
@@ -101,6 +127,75 @@ final class BrokerApis implements RequestHandler {
           groupRequest(key, body);
       default -> throw new InvalidRequestException("unknown api " + key);
     };
+  }
+
+  private static final Errors UNAUTHORIZED = Errors.CLUSTER_AUTHORIZATION_FAILED;
+
+  private CompletableFuture<ByteBuffer> authenticate(Context ctx, Authenticate.Request req) {
+    byte[] given = req.token().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    if (java.security.MessageDigest.isEqual(given, clusterToken)) {
+      ctx.session().markClusterMember();
+      return done(new Authenticate.Response(Errors.NONE.code())::write);
+    }
+    // Never log the presented value.
+    LOG.warn("cluster authentication refused", "client", ctx.clientAddress());
+    return done(new Authenticate.Response(UNAUTHORIZED.code())::write);
+  }
+
+  private static Topics.CreateResponse refuseCreate(Topics.CreateRequest req, Errors err) {
+    List<Topics.CreateResult> rs = new ArrayList<>();
+    req.topics().forEach(t -> rs.add(new Topics.CreateResult(t.name(), err.code(), null)));
+    return new Topics.CreateResponse(rs);
+  }
+
+  private static Topics.DeleteResponse refuseDelete(Topics.DeleteRequest req, Errors err) {
+    List<Topics.DeleteResult> rs = new ArrayList<>();
+    req.names().forEach(n -> rs.add(new Topics.DeleteResult(n, err.code())));
+    return new Topics.DeleteResponse(rs);
+  }
+
+  private static ControllerApis.AlterIsrResponse refuseAlterIsr(
+      ControllerApis.AlterIsrRequest req, Errors err) {
+    List<ControllerApis.AlterTopicResult> ts = new ArrayList<>();
+    for (ControllerApis.AlterTopic t : req.topics()) {
+      List<ControllerApis.AlterResult> ps = new ArrayList<>();
+      t.partitions()
+          .forEach(
+              p ->
+                  ps.add(
+                      new ControllerApis.AlterResult(
+                          p.partition(), err.code(), -1, -1, List.of())));
+      ts.add(new ControllerApis.AlterTopicResult(t.name(), ps));
+    }
+    return new ControllerApis.AlterIsrResponse(ts);
+  }
+
+  private static Fetch.Response refuseFetch(Fetch.Request req) {
+    List<Fetch.TopicResult> topics = new ArrayList<>();
+    for (Fetch.TopicData t : req.topics()) {
+      List<Fetch.PartitionResult> ps = new ArrayList<>();
+      t.partitions()
+          .forEach(
+              p ->
+                  ps.add(
+                      new Fetch.PartitionResult(
+                          p.partition(), UNAUTHORIZED.code(), -1, -1, -1, ByteBuffer.allocate(0))));
+      topics.add(new Fetch.TopicResult(t.name(), ps));
+    }
+    return new Fetch.Response(topics);
+  }
+
+  private static Replication.OffsetForLeaderEpochResponse refuseEpochs(
+      Replication.OffsetForLeaderEpochRequest req) {
+    List<Replication.EpochTopicResult> ts = new ArrayList<>();
+    for (Replication.EpochTopic t : req.topics()) {
+      List<Replication.EpochEnd> ps = new ArrayList<>();
+      t.partitions()
+          .forEach(
+              p -> ps.add(new Replication.EpochEnd(p.partition(), UNAUTHORIZED.code(), -1, -1)));
+      ts.add(new Replication.EpochTopicResult(t.name(), ps));
+    }
+    return new Replication.OffsetForLeaderEpochResponse(ts);
   }
 
   private static CompletableFuture<ByteBuffer> done(Consumer<ProtocolWriter> body) {
@@ -203,20 +298,14 @@ final class BrokerApis implements RequestHandler {
 
   private CompletableFuture<ByteBuffer> createTopics(Topics.CreateRequest req) {
     if (controller == null) {
-      List<Topics.CreateResult> rs = new ArrayList<>();
-      req.topics()
-          .forEach(
-              t -> rs.add(new Topics.CreateResult(t.name(), Errors.NOT_CONTROLLER.code(), null)));
-      return done(new Topics.CreateResponse(rs)::write);
+      return done(refuseCreate(req, Errors.NOT_CONTROLLER)::write);
     }
     return done(controller.createTopics(req)::write);
   }
 
   private CompletableFuture<ByteBuffer> deleteTopics(Topics.DeleteRequest req) {
     if (controller == null) {
-      List<Topics.DeleteResult> rs = new ArrayList<>();
-      req.names().forEach(n -> rs.add(new Topics.DeleteResult(n, Errors.NOT_CONTROLLER.code())));
-      return done(new Topics.DeleteResponse(rs)::write);
+      return done(refuseDelete(req, Errors.NOT_CONTROLLER)::write);
     }
     return done(controller.deleteTopics(req)::write);
   }
@@ -231,18 +320,7 @@ final class BrokerApis implements RequestHandler {
 
   private CompletableFuture<ByteBuffer> alterIsr(ControllerApis.AlterIsrRequest req) {
     if (controller == null) {
-      List<ControllerApis.AlterTopicResult> ts = new ArrayList<>();
-      for (ControllerApis.AlterTopic t : req.topics()) {
-        List<ControllerApis.AlterResult> ps = new ArrayList<>();
-        t.partitions()
-            .forEach(
-                p ->
-                    ps.add(
-                        new ControllerApis.AlterResult(
-                            p.partition(), Errors.NOT_CONTROLLER.code(), -1, -1, List.of())));
-        ts.add(new ControllerApis.AlterTopicResult(t.name(), ps));
-      }
-      return done(new ControllerApis.AlterIsrResponse(ts)::write);
+      return done(refuseAlterIsr(req, Errors.NOT_CONTROLLER)::write);
     }
     return done(controller.alterIsr(req)::write);
   }

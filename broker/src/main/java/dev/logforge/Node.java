@@ -107,7 +107,8 @@ public final class Node implements AutoCloseable {
                   config.controllerHost,
                   config.controllerPort,
                   config.nodeId,
-                  (int) config.brokerSessionTimeoutMs);
+                  (int) config.brokerSessionTimeoutMs,
+                  config.clusterToken);
       logManager = new LogManager(config.dataDir, System::currentTimeMillis);
       producerIds = new ProducerIdManager(config.dataDir, config.nodeId);
       replicaManager =
@@ -124,7 +125,8 @@ public final class Node implements AutoCloseable {
               replicaManager,
               this::brokerAddress,
               config.replicaFetchWaitMs,
-              8 * 1024 * 1024);
+              8 * 1024 * 1024,
+              config.clusterToken);
       replicaManager.setFetcherControl(fetchers);
       replicaManager.setLatencyObserver(metrics);
       registerGauges();
@@ -136,7 +138,9 @@ public final class Node implements AutoCloseable {
               controllerChannel,
               System::currentTimeMillis);
     }
-    apis = new BrokerApis(controller, replicaManager, () -> metadata, producerIds);
+    apis =
+        new BrokerApis(
+            controller, replicaManager, () -> metadata, producerIds, config.clusterToken);
     if (groupCoordinator != null) {
       apis.setGroupApis(groupCoordinator::handle);
     }

@@ -16,8 +16,12 @@ import java.util.concurrent.CompletableFuture;
  */
 public interface RequestHandler {
 
-  /** Identifies the request for logging and per-connection state. */
-  record Context(long connectionId, String clientAddress, RequestHeader header) {
+  /** Identifies the request for logging and carries the connection's {@link Session}. */
+  record Context(long connectionId, String clientAddress, RequestHeader header, Session session) {
+    public Context(long connectionId, String clientAddress, RequestHeader header) {
+      this(connectionId, clientAddress, header, new Session());
+    }
+
     public String correlationTag() {
       return connectionId + "-" + header.correlationId();
     }

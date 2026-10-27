@@ -125,7 +125,7 @@ class ConsumerGroupTest {
   void aDeadMembersPartitionsMoveAndResumeFromTheCommittedOffsetWithNoGap() throws Exception {
     try (Node node = EmbeddedNode.start(dir)) {
       String bootstrap = EmbeddedNode.bootstrap(node);
-      try (Admin admin = new Admin(bootstrap)) {
+      try (Admin admin = new Admin(bootstrap, TestToken.VALUE)) {
         admin.createTopic("orders", 6, 1, Map.of());
       }
       Map<Integer, Long> produced = new ConcurrentHashMap<>();

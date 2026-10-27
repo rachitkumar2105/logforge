@@ -9,17 +9,24 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
-/** Topic administration. Requests go to the controller; the client finds it through metadata. */
+/**
+ * Topic administration. Requests go to the controller; the client finds it through metadata. It
+ * authenticates with the cluster token, without which the cluster refuses topic changes
+ * (SECURITY-AUDIT F1).
+ */
 public final class Admin implements AutoCloseable {
   private final ClientMetadata metadata;
   private final int timeoutMs;
 
-  public Admin(String bootstrapServers) {
-    this(bootstrapServers, 30_000);
+  public Admin(String bootstrapServers, String clusterToken) {
+    this(bootstrapServers, 30_000, clusterToken);
   }
 
-  public Admin(String bootstrapServers, int timeoutMs) {
-    this.metadata = new ClientMetadata(bootstrapServers, "logforge-admin", timeoutMs);
+  public Admin(String bootstrapServers, int timeoutMs, String clusterToken) {
+    if (clusterToken == null || clusterToken.isBlank()) {
+      throw new IllegalArgumentException("Admin needs the cluster token");
+    }
+    this.metadata = new ClientMetadata(bootstrapServers, "logforge-admin", timeoutMs, clusterToken);
     this.timeoutMs = timeoutMs;
     this.metadata.refresh();
   }

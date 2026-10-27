@@ -33,6 +33,9 @@ services:
         generateValue: true
       - key: LOGFORGE_READ_TOKEN
         generateValue: true
+      # Binary-protocol secret (SECURITY-AUDIT F1); only this node and its seeder use it.
+      - key: LOGFORGE_CLUSTER_TOKEN
+        generateValue: true
       # The site's production origin. Not a secret.
       - key: LOGFORGE_CORS_ORIGINS
         value: https://logforge-five.vercel.app

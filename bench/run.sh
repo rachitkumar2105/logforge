@@ -12,6 +12,7 @@ export MSYS_NO_PATHCONV=1
 WARMUP="${WARMUP:-5}"
 MEASURE="${MEASURE:-20}"
 RESULTS="$(pwd)/bench/results"
+set -a; . ./.env; set +a
 SYSTEMS="${SYSTEMS:-logforge kafka}"
 mkdir -p "$RESULTS"
 for sys in $SYSTEMS; do rm -f "$RESULTS/$sys"-*.json; done
@@ -30,7 +31,7 @@ docker build -q -f bench/Dockerfile -t logforge-bench . >/dev/null
 bench() { # network bootstrap args...
   local net="$1" boot="$2"; shift 2
   docker run --rm --network "$net" -v "$RESULTS_MOUNT:/results" \
-    -e BENCH_HOST="$BENCH_HOST" -e BENCH_ENV="$BENCH_ENV" \
+    -e BENCH_HOST="$BENCH_HOST" -e BENCH_ENV="$BENCH_ENV" -e LOGFORGE_CLUSTER_TOKEN \
     logforge-bench suite --bootstrap "$boot" --out /results --warmup "$WARMUP" --measure "$MEASURE" --command "$CMD" "$@"
 }
 
@@ -54,7 +55,6 @@ for policy in never ms:1000 records:1; do
     bench logforge_cluster "$LF_BOOT" --system logforge --suite core --fsync never
     # Prove replication kept up: every follower's log end must equal its leader's after the runs.
     sleep 5
-    set -a; . ./.env; set +a
     curl -s -H "Authorization: Bearer $LOGFORGE_READ_TOKEN" http://127.0.0.1:8080/api/v1/cluster |
       python -c "
 import json, sys

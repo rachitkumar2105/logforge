@@ -35,7 +35,7 @@ class EndToEndTest {
   @Test
   void produceThenConsumeAcrossARealSocket() throws Exception {
     String bootstrap = EmbeddedNode.bootstrap(node);
-    try (Admin admin = new Admin(bootstrap)) {
+    try (Admin admin = new Admin(bootstrap, TestToken.VALUE)) {
       admin.createTopic("orders", 3, 1, Map.of());
     }
 
@@ -82,7 +82,7 @@ class EndToEndTest {
   @Test
   void recordsWithTheSameKeyLandOnTheSamePartitionInOrder() throws Exception {
     String bootstrap = EmbeddedNode.bootstrap(node);
-    try (Admin admin = new Admin(bootstrap)) {
+    try (Admin admin = new Admin(bootstrap, TestToken.VALUE)) {
       admin.createTopic("keyed", 4, 1, Map.of());
     }
     List<RecordMetadata> mds = new ArrayList<>();
@@ -101,7 +101,7 @@ class EndToEndTest {
   @Test
   void acksAllAndFireAndForgetBothDeliver() throws Exception {
     String bootstrap = EmbeddedNode.bootstrap(node);
-    try (Admin admin = new Admin(bootstrap)) {
+    try (Admin admin = new Admin(bootstrap, TestToken.VALUE)) {
       admin.createTopic("acks", 1, 1, Map.of());
     }
     try (Producer all = new Producer(ProducerConfig.builder(bootstrap).acks(Acks.ALL).build());

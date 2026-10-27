@@ -20,6 +20,8 @@ public final class NodeConfig {
     CONTROLLER
   }
 
+  public static final int MIN_CLUSTER_TOKEN_LENGTH = 24;
+
   public final int nodeId;
   public final Set<Role> roles;
   public final String listenHost;
@@ -52,11 +54,15 @@ public final class NodeConfig {
   public final long compactionIntervalMs;
   public final String clusterId;
 
+  /** Shared secret for the cluster's own operations on the binary protocol (F1). */
+  public final String clusterToken;
+
   /** Sample topic to write at startup (hosted demo), or null. */
   public final Seeder.Spec seed;
 
   private NodeConfig(Builder b) {
     this.nodeId = b.nodeId;
+    this.clusterToken = b.clusterToken;
     this.seed = b.seed;
     this.roles = EnumSet.copyOf(b.roles);
     this.listenHost = b.listenHost;
@@ -197,6 +203,17 @@ public final class NodeConfig {
     if (env.containsKey("LOGFORGE_CLUSTER_ID")) {
       b.clusterId(env.get("LOGFORGE_CLUSTER_ID"));
     }
+    // Required: without it anyone who can reach port 9092 could reconfigure the cluster.
+    // The message names the variable, never the value.
+    String clusterToken = env.get("LOGFORGE_CLUSTER_TOKEN");
+    if (clusterToken == null || clusterToken.isBlank()) {
+      throw new IllegalArgumentException("LOGFORGE_CLUSTER_TOKEN is required");
+    }
+    if (clusterToken.length() < MIN_CLUSTER_TOKEN_LENGTH) {
+      throw new IllegalArgumentException(
+          "LOGFORGE_CLUSTER_TOKEN must be at least " + MIN_CLUSTER_TOKEN_LENGTH + " characters");
+    }
+    b.clusterToken(clusterToken);
     String seed = env.get("LOGFORGE_SEED_TOPIC");
     if (seed != null && !seed.isBlank()) {
       b.seed(Seeder.Spec.parse(seed.trim()));
@@ -243,6 +260,7 @@ public final class NodeConfig {
     private int offsetsTopicPartitions = 3;
     private int offsetsTopicReplicationFactor = 3;
     private Seeder.Spec seed;
+    private String clusterToken;
     private long retentionCheckIntervalMs = 30_000;
     private long compactionIntervalMs = 15_000;
     private String clusterId = "logforge";
@@ -375,6 +393,11 @@ public final class NodeConfig {
       return this;
     }
 
+    public Builder clusterToken(String v) {
+      clusterToken = v;
+      return this;
+    }
+
     public Builder seed(Seeder.Spec v) {
       seed = v;
       return this;
@@ -415,6 +438,10 @@ public final class NodeConfig {
       }
       if (maxRequestBytes < 1024) {
         throw new IllegalArgumentException("maxRequestBytes too small");
+      }
+      if (clusterToken == null || clusterToken.length() < MIN_CLUSTER_TOKEN_LENGTH) {
+        throw new IllegalArgumentException(
+            "clusterToken must be at least " + MIN_CLUSTER_TOKEN_LENGTH + " characters");
       }
       return new NodeConfig(this);
     }

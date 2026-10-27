@@ -56,9 +56,10 @@ public final class Seeder {
    * Creates the topic with replication factor 1 and writes the records, unless the topic already
    * exists. Returns the number of records written.
    */
-  public static int seed(String host, int port, Spec spec)
+  public static int seed(String host, int port, Spec spec, String clusterToken)
       throws IOException, InterruptedException {
-    try (BlockingChannel ch = new BlockingChannel(host, port, "logforge-seeder", 10_000)) {
+    try (BlockingChannel ch =
+        new BlockingChannel(host, port, "logforge-seeder", 10_000, clusterToken)) {
       Topics.CreateRequest create =
           new Topics.CreateRequest(
               10_000,

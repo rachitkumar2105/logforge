@@ -33,7 +33,7 @@ final class LogForgeSystem implements SystemUnderTest {
 
   @Override
   public void createTopic(String name, int partitions, int rf, Map<String, String> configs) {
-    try (Admin admin = new Admin(bootstrap, 60_000)) {
+    try (Admin admin = new Admin(bootstrap, 60_000, Main.clusterToken())) {
       admin.createTopic(name, partitions, rf, configs);
     }
   }

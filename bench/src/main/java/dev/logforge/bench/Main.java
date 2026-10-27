@@ -27,6 +27,15 @@ import java.util.stream.Stream;
 public final class Main {
   private Main() {}
 
+  /** The LogForge cluster token, from the environment only; needed to create topics (F1). */
+  static String clusterToken() {
+    String t = System.getenv("LOGFORGE_CLUSTER_TOKEN");
+    if (t == null || t.isBlank()) {
+      throw new IllegalStateException("LOGFORGE_CLUSTER_TOKEN is required");
+    }
+    return t;
+  }
+
   static Map<String, String> args(String[] a, int from) {
     Map<String, String> m = new HashMap<>();
     for (int i = from; i + 1 < a.length; i += 2) {

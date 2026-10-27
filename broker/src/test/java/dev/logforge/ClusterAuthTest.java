@@ -109,12 +109,12 @@ class ClusterAuthTest {
   }
 
   @Test
-  void anAnonymousConnectionCannotFetchAsAFollowerButProducersAndConsumersWork()
-      throws Exception {
+  void anAnonymousConnectionCannotFetchAsAFollowerButProducersAndConsumersWork() throws Exception {
     try (Node node = TestNodes.single(dir);
         TestClient anon = TestClient.anonymous("127.0.0.1", node.port());
         TestClient admin = new TestClient("127.0.0.1", node.port())) {
       admin.createTopic("t", 1, 1, Map.of());
+      TestNodes.awaitTrue(() -> node.isLeaderFor("t", 0), java.time.Duration.ofSeconds(10));
       assertThat(anon.produce("t", 0, (short) 1, TestClient.batch("a")).errorCode())
           .isEqualTo(Errors.NONE.code());
       Fetch.PartitionResult consumer = anon.fetch("t", 0, 0, 0);

@@ -62,7 +62,8 @@ run_scenario() {
   wait_healthy
   rm -f "$WORK/$name.acks" "$WORK/$name.stop"
   docker rm -f chaos-producer >/dev/null 2>&1 || true
-  docker run -d --name chaos-producer --network logforge_cluster -v "$WORK_MOUNT:/work" logforge-bench \
+  docker run -d --name chaos-producer --network logforge_cluster -v "$WORK_MOUNT:/work" \
+    -e LOGFORGE_CLUSTER_TOKEN logforge-bench \
     chaos-produce --bootstrap "$BOOT" --topic "$topic" --acks "/work/$name.acks" --stop "/work/$name.stop" \
     --rate 2000 --partitions 3 --size "$size" >/dev/null
   local replay_args=()
@@ -85,7 +86,7 @@ run_scenario() {
   docker rm chaos-producer >/dev/null
   if [ "$name" = "leader-kill" ]; then docker wait chaos-recorder >/dev/null; docker rm chaos-recorder >/dev/null; fi
   docker run --rm --network logforge_cluster -v "$WORK_MOUNT:/work" -v "$RESULTS_MOUNT:/results" \
-    -e BENCH_HOST="$BENCH_HOST" -e BENCH_ENV="$BENCH_ENV" logforge-bench \
+    -e BENCH_HOST="$BENCH_HOST" -e BENCH_ENV="$BENCH_ENV" -e LOGFORGE_CLUSTER_TOKEN logforge-bench \
     chaos-verify --bootstrap "$BOOT" --topic "$topic" --acks "/work/$name.acks" --partitions 3 \
     --out "/results/$name.json" --scenario "$name" --description "$description" --rate 2000 \
     --command "bash chaos/run-all.sh $name" "${replay_args[@]}" | tail -1 |

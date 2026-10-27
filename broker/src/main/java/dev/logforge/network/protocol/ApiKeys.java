@@ -20,6 +20,7 @@ public final class ApiKeys {
   public static final short OFFSET_FOR_LEADER_EPOCH = 13;
   public static final short BROKER_HEARTBEAT = 100;
   public static final short ALTER_ISR = 101;
+  public static final short AUTHENTICATE = 102;
 
   public static String name(short key) {
     return switch (key) {
@@ -39,6 +40,7 @@ public final class ApiKeys {
       case OFFSET_FOR_LEADER_EPOCH -> "OffsetForLeaderEpoch";
       case BROKER_HEARTBEAT -> "BrokerHeartbeat";
       case ALTER_ISR -> "AlterIsr";
+      case AUTHENTICATE -> "Authenticate";
       default -> "Unknown(" + key + ")";
     };
   }

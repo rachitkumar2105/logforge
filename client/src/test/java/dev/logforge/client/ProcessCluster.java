@@ -60,6 +60,7 @@ final class ProcessCluster implements AutoCloseable {
     env.put("LOGFORGE_DATA_DIR", dir.resolve("node-" + id).toString());
     env.put("LOGFORGE_ADMIN_LISTEN", "off");
     env.put("LOGFORGE_FSYNC", "never");
+    env.put("LOGFORGE_CLUSTER_TOKEN", TestToken.VALUE);
     env.put("LOGFORGE_HEARTBEAT_MS", "100");
     env.put("LOGFORGE_SESSION_TIMEOUT_MS", "2000");
     env.put("LOGFORGE_REPLICA_LAG_MS", "3000");

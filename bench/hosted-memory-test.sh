@@ -16,14 +16,15 @@ docker run -d --name lf-hosted --network lf-mem --memory=512m --memory-swap=512m
   -e PORT=10000 -e LOGFORGE_NODE_ID=1 -e LOGFORGE_ROLES=broker,controller \
   -e LOGFORGE_ADVERTISED=lf-hosted:9092 -e LOGFORGE_IO_THREADS=1 -e LOGFORGE_HANDLER_THREADS=2 \
   -e LOGFORGE_SEED_TOPIC=demo-orders:3:600 -e LOGFORGE_CORS_ORIGINS=http://localhost:3000 \
-  -e LOGFORGE_ADMIN_TOKEN -e LOGFORGE_READ_TOKEN -e JAVA_TOOL_OPTIONS="$JOPTS" \
+  -e LOGFORGE_ADMIN_TOKEN -e LOGFORGE_READ_TOKEN -e LOGFORGE_CLUSTER_TOKEN -e JAVA_TOOL_OPTIONS="$JOPTS" \
   logforge:local >/dev/null
 until curl -sf http://127.0.0.1:10000/health >/dev/null; do sleep 0.5; [ $(( $(date +%s) - START )) -gt 180 ] && { echo "no health after 180 s"; break; }; done
 echo "health after $(( $(date +%s) - START )) s (0.1 CPU)" > "$OUT"
 sleep 10
 echo "seed: $(docker logs lf-hosted 2>&1 | grep -o '"msg":"seed[^"]*"[^}]*' | head -2)" >> "$OUT"
 # Load: rf=1 producer at 500 records/s for 8 minutes, plus the admin cluster view once a second.
-docker run -d --name lf-load --network lf-mem -v "$WORK_W:/work" logforge-bench chaos-produce \
+docker run -d --name lf-load --network lf-mem -v "$WORK_W:/work" -e LOGFORGE_CLUSTER_TOKEN \
+  logforge-bench chaos-produce \
   --bootstrap lf-hosted:9092 --topic load --acks /work/load.acks --stop /work/load.stop \
   --rate 500 --partitions 3 --size 512 --rf 1 >/dev/null
 rm -f "$WORK/load.stop"

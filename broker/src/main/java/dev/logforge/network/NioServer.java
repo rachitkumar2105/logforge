@@ -189,6 +189,7 @@ public final class NioServer implements Closeable {
     ByteBuffer writing;
     SelectionKey key;
     boolean muted;
+    final Session session = new Session();
 
     Connection(long id, SocketChannel channel, String address) {
       this.id = id;
@@ -355,7 +356,7 @@ public final class NioServer implements Closeable {
         notifyReady(c);
         return true;
       }
-      RequestHandler.Context ctx = new RequestHandler.Context(c.id, c.address, header);
+      RequestHandler.Context ctx = new RequestHandler.Context(c.id, c.address, header, c.session);
       c.serial.execute(
           () -> {
             String prev = JsonLog.setCorrelationId(ctx.correlationTag());

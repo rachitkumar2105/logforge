@@ -14,6 +14,7 @@ public final class ReplicaFetcherManager implements FetcherControl, Closeable {
   private final IntFunction<InetSocketAddress> addressOf;
   private final int maxWaitMs;
   private final int maxBytes;
+  private final String clusterToken;
   private final Map<Integer, ReplicaFetcher> fetchers = new HashMap<>();
   private final Map<TopicPartition, Integer> leaders = new HashMap<>();
   private volatile boolean paused;
@@ -23,7 +24,9 @@ public final class ReplicaFetcherManager implements FetcherControl, Closeable {
       ReplicaManager replicaManager,
       IntFunction<InetSocketAddress> addressOf,
       int maxWaitMs,
-      int maxBytes) {
+      int maxBytes,
+      String clusterToken) {
+    this.clusterToken = clusterToken;
     this.localId = localId;
     this.replicaManager = replicaManager;
     this.addressOf = addressOf;
@@ -43,7 +46,14 @@ public final class ReplicaFetcherManager implements FetcherControl, Closeable {
             id -> {
               ReplicaFetcher nf =
                   new ReplicaFetcher(
-                      localId, id, replicaManager, addressOf, () -> paused, maxWaitMs, maxBytes);
+                      localId,
+                      id,
+                      replicaManager,
+                      addressOf,
+                      () -> paused,
+                      maxWaitMs,
+                      maxBytes,
+                      clusterToken);
               nf.start();
               return nf;
             });

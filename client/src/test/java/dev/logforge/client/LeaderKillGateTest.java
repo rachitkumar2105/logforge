@@ -137,7 +137,7 @@ class LeaderKillGateTest {
     long deadline = System.nanoTime() + Duration.ofSeconds(60).toNanos();
     while (true) {
       try {
-        return new Admin(bootstrap, 10_000);
+        return new Admin(bootstrap, 10_000, TestToken.VALUE);
       } catch (RuntimeException e) {
         if (System.nanoTime() > deadline) {
           throw e;

@@ -30,7 +30,7 @@ class MillionRecordsTest {
   void oneMillionRecordsAtAcksOneZeroLossZeroDuplicates() throws Exception {
     try (Node node = EmbeddedNode.start(dir)) {
       String bootstrap = EmbeddedNode.bootstrap(node);
-      try (Admin admin = new Admin(bootstrap)) {
+      try (Admin admin = new Admin(bootstrap, TestToken.VALUE)) {
         admin.createTopic("million", 4, 1, Map.of());
       }
 
