@@ -1,48 +1,46 @@
-# bash bench/hosted-memory-test.sh, 2026-10-26, host: i7-1255U laptop, Docker Desktop (WSL 2)
-# JAVA_TOOL_OPTIONS as in render.yaml; cgroup = docker stats memory; VmRSS = JVM process resident set
-health after 9 s (0.1 CPU)
+health after 10 s (0.1 CPU)
 seed: "msg":"seed topic written","topic":"demo-orders","records":600
-t=15s cgroup=48.55MiB / 512MiB 10.15% VmRSS:	 64780 kB
-t=30s cgroup=49.31MiB / 512MiB 9.94% VmRSS:	 65336 kB
-t=45s cgroup=50.61MiB / 512MiB 9.43% VmRSS:	 65824 kB
-t=60s cgroup=50.8MiB / 512MiB 9.58% VmRSS:	 65744 kB
-t=75s cgroup=50.87MiB / 512MiB 10.27% VmRSS:	 65864 kB
-t=90s cgroup=50.57MiB / 512MiB 9.92% VmRSS:	 65944 kB
-t=105s cgroup=50.98MiB / 512MiB 9.38% VmRSS:	 66076 kB
-t=120s cgroup=51.2MiB / 512MiB 9.27% VmRSS:	 66220 kB
-t=135s cgroup=50.89MiB / 512MiB 10.22% VmRSS:	 66276 kB
-t=150s cgroup=51.9MiB / 512MiB 9.88% VmRSS:	 66292 kB
-t=165s cgroup=51.74MiB / 512MiB 8.99% VmRSS:	 66308 kB
-t=180s cgroup=52.24MiB / 512MiB 10.64% VmRSS:	 66356 kB
-t=195s cgroup=51.57MiB / 512MiB 9.22% VmRSS:	 66528 kB
-t=210s cgroup=52.44MiB / 512MiB 10.47% VmRSS:	 66400 kB
-t=225s cgroup=52.57MiB / 512MiB 9.91% VmRSS:	 66504 kB
-t=240s cgroup=51.97MiB / 512MiB 10.51% VmRSS:	 66536 kB
-t=255s cgroup=52.41MiB / 512MiB 9.95% VmRSS:	 66572 kB
-t=270s cgroup=52.89MiB / 512MiB 10.06% VmRSS:	 66608 kB
-t=285s cgroup=53.07MiB / 512MiB 10.76% VmRSS:	 66620 kB
-t=300s cgroup=52.93MiB / 512MiB 9.71% VmRSS:	 66660 kB
-t=315s cgroup=52.91MiB / 512MiB 9.98% VmRSS:	 66660 kB
-t=330s cgroup=54.92MiB / 512MiB 9.58% VmRSS:	 66696 kB
-t=345s cgroup=53.59MiB / 512MiB 9.65% VmRSS:	 66720 kB
-t=360s cgroup=53.8MiB / 512MiB 10.40% VmRSS:	 66720 kB
-t=375s cgroup=54.22MiB / 512MiB 10.49% VmRSS:	 66732 kB
-t=390s cgroup=55.72MiB / 512MiB 9.90% VmRSS:	 66792 kB
-t=405s cgroup=54.33MiB / 512MiB 9.99% VmRSS:	 66804 kB
-t=420s cgroup=56.14MiB / 512MiB 10.83% VmRSS:	 66804 kB
-t=435s cgroup=55.53MiB / 512MiB 10.74% VmRSS:	 66804 kB
-t=450s cgroup=55.29MiB / 512MiB 11.92% VmRSS:	 66832 kB
-t=465s cgroup=55.44MiB / 512MiB 9.91% VmRSS:	 66824 kB
-t=480s cgroup=55.73MiB / 512MiB 9.94% VmRSS:	 66836 kB
-t=495s cgroup=54.08MiB / 512MiB 0.73% VmRSS:	 66836 kB
-t=510s cgroup=53.95MiB / 512MiB 0.42% VmRSS:	 66872 kB
-t=525s cgroup=53.46MiB / 512MiB 0.65% VmRSS:	 66864 kB
-t=540s cgroup=53.72MiB / 512MiB 0.67% VmRSS:	 66864 kB
-t=555s cgroup=53.79MiB / 512MiB 0.46% VmRSS:	 66864 kB
-t=570s cgroup=53.97MiB / 512MiB 0.52% VmRSS:	 66920 kB
-t=585s cgroup=54.56MiB / 512MiB 0.41% VmRSS:	 66920 kB
-t=600s cgroup=54.76MiB / 512MiB 7.45% VmRSS:	 66920 kB
-producer: chaos-produce: sent=333331 failed=0
+t=15s cgroup=48.93MiB / 512MiB 9.19% VmRSS:	 65296 kB
+t=30s cgroup=50.09MiB / 512MiB 9.44% VmRSS:	 65940 kB
+t=45s cgroup=49.93MiB / 512MiB 9.47% VmRSS:	 65928 kB
+t=60s cgroup=50.64MiB / 512MiB 9.30% VmRSS:	 66044 kB
+t=75s cgroup=50.61MiB / 512MiB 9.65% VmRSS:	 66160 kB
+t=90s cgroup=50.77MiB / 512MiB 9.55% VmRSS:	 66300 kB
+t=105s cgroup=50.84MiB / 512MiB 10.04% VmRSS:	 66340 kB
+t=120s cgroup=51.64MiB / 512MiB 10.75% VmRSS:	 66464 kB
+t=135s cgroup=52.07MiB / 512MiB 10.58% VmRSS:	 66640 kB
+t=150s cgroup=51.29MiB / 512MiB 9.68% VmRSS:	 66564 kB
+t=165s cgroup=50.89MiB / 512MiB 10.13% VmRSS:	 66584 kB
+t=180s cgroup=52.14MiB / 512MiB 9.95% VmRSS:	 66908 kB
+t=195s cgroup=52.59MiB / 512MiB 9.91% VmRSS:	 66656 kB
+t=210s cgroup=52.24MiB / 512MiB 9.74% VmRSS:	 66672 kB
+t=225s cgroup=52.48MiB / 512MiB 9.84% VmRSS:	 66796 kB
+t=240s cgroup=53.33MiB / 512MiB 9.83% VmRSS:	 66792 kB
+t=255s cgroup=53.27MiB / 512MiB 9.48% VmRSS:	 66880 kB
+t=270s cgroup=53.55MiB / 512MiB 9.40% VmRSS:	 66908 kB
+t=285s cgroup=53.77MiB / 512MiB 10.16% VmRSS:	 66964 kB
+t=300s cgroup=53.55MiB / 512MiB 10.15% VmRSS:	 66964 kB
+t=315s cgroup=53.32MiB / 512MiB 9.72% VmRSS:	 66980 kB
+t=330s cgroup=53.5MiB / 512MiB 9.56% VmRSS:	 66992 kB
+t=345s cgroup=53.99MiB / 512MiB 9.75% VmRSS:	 67040 kB
+t=360s cgroup=54.22MiB / 512MiB 9.67% VmRSS:	 67040 kB
+t=375s cgroup=54.5MiB / 512MiB 10.15% VmRSS:	 67052 kB
+t=390s cgroup=54.99MiB / 512MiB 9.42% VmRSS:	 67120 kB
+t=405s cgroup=54.58MiB / 512MiB 9.79% VmRSS:	 67136 kB
+t=420s cgroup=54.71MiB / 512MiB 9.97% VmRSS:	 67136 kB
+t=435s cgroup=54.8MiB / 512MiB 9.58% VmRSS:	 67164 kB
+t=450s cgroup=55.81MiB / 512MiB 9.89% VmRSS:	 67204 kB
+t=465s cgroup=55.98MiB / 512MiB 9.83% VmRSS:	 67208 kB
+t=480s cgroup=55.66MiB / 512MiB 10.09% VmRSS:	 67208 kB
+t=495s cgroup=54.84MiB / 512MiB 0.79% VmRSS:	 67208 kB
+t=510s cgroup=54.11MiB / 512MiB 0.63% VmRSS:	 67208 kB
+t=525s cgroup=54.75MiB / 512MiB 0.59% VmRSS:	 67232 kB
+t=540s cgroup=54.24MiB / 512MiB 0.76% VmRSS:	 67232 kB
+t=555s cgroup=54.61MiB / 512MiB 0.60% VmRSS:	 67232 kB
+t=570s cgroup=54.23MiB / 512MiB 0.50% VmRSS:	 67252 kB
+t=585s cgroup=53.93MiB / 512MiB 0.58% VmRSS:	 67252 kB
+t=600s cgroup=53.95MiB / 512MiB 0.69% VmRSS:	 67252 kB
+producer: chaos-produce: sent=341036 failed=0
 state: running=true oomkilled=false restarts=0 exit=0
 errors in log: 0
 done
