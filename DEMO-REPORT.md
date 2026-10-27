@@ -6,14 +6,14 @@ Checked on 2026-10-26 with `playwright-cli` 0.1.22 (Chromium, headless) against 
 
 ### Screenshots at nine widths (dark, broker live)
 
-Full-page JPEGs after scrolling the whole page once so scroll reveals have played. Horizontal overflow measured as `scrollWidth > clientWidth`.
+Full-page JPEGs of production (`https://logforge-five.vercel.app`, live hosted broker), retaken on 2026-10-27 after the review fixes, after scrolling the whole page once so scroll reveals have played. Horizontal overflow measured as `scrollWidth > clientWidth`. The reduced-motion pages below were retaken from production at the same time.
 
 | Width | File | Page height | Horizontal overflow |
 |---|---|---|---|
 | 375 | [home-375.jpg](docs/demo/home-375.jpg) | 12,648 px | none |
 | 414 | [home-414.jpg](docs/demo/home-414.jpg) | 11,973 px | none |
 | 768 | [home-768.jpg](docs/demo/home-768.jpg) | 9,909 px | none |
-| 1024 | [home-1024.jpg](docs/demo/home-1024.jpg) | 8,324 px | none |
+| 1024 | [home-1024.jpg](docs/demo/home-1024.jpg) | 8,304 px | none |
 | 1280 | [home-1280.jpg](docs/demo/home-1280.jpg) | 8,202 px | none |
 | 1440 | [home-1440.jpg](docs/demo/home-1440.jpg) | 8,159 px | none |
 | 1920 | [home-1920.jpg](docs/demo/home-1920.jpg) | 8,168 px | none |
