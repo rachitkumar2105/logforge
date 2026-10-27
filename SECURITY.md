@@ -42,6 +42,10 @@ Assessment: the broker has zero runtime dependencies and none of these reach it.
 
 **Site** (`pnpm audit`): four postcss advisories (GHSA-qx2v-qp2m-jg93, GHSA-6g55-p6wh-862q, GHSA-fxqj-rqcc-2cmp, GHSA-r28c-9q8g-f849) came in through `next > postcss@8.4.31`. A pnpm override pins that copy to 8.5.31, the version `@tailwindcss/postcss` already used. After it: `No known vulnerabilities found`.
 
+## Accepted risks
+
+- **F4, rate limits live in memory on each node.** The admin API's per-IP and per-token buckets (`admin/RateLimiter.java`) are not shared. Only the controller serves the cluster API, so its limits are effectively global today; on Render it is the only node. If the admin API were ever replicated behind a load balancer, each replica would allow the full rate and the limits would need a shared store. Also, behind Render's proxy every request reaches the node from the proxy's address, so the per-IP bucket is shared by all callers there; the per-token bucket and the site's 1 to 2 s server-side cache keep the site well inside it.
+
 ## Reporting a problem
 
 Open an issue on the GitHub repository; do not include secrets.
