@@ -7,10 +7,15 @@ export function Header() {
   return (
     <header className="border-b border-line">
       <nav aria-label="Primary" className="wrap flex min-h-14 flex-wrap items-center gap-x-6 gap-y-2 py-2">
-        <Link href="/" className="mono text-sm font-semibold text-text no-underline" translate="no">
+        <Link
+          href="/"
+          className="mono inline-flex min-h-[44px] items-center text-sm font-semibold text-text no-underline"
+          translate="no"
+        >
           logforge
         </Link>
-        <ul className="ml-auto flex flex-wrap gap-x-5 gap-y-1 text-sm">
+        {/* 44 px touch targets (WCAG 2.5.8 asks for at least 24). */}
+        <ul className="ml-auto flex flex-wrap gap-x-5 text-sm [&_a]:inline-flex [&_a]:min-h-[44px] [&_a]:items-center">
           <li><Link href="/#topology">Topology</Link></li>
           <li><Link href="/#replay">Replay</Link></li>
           <li><Link href="/#explorer">Explorer</Link></li>
