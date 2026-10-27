@@ -81,8 +81,8 @@ Both are server-side only. Never prefix them with `NEXT_PUBLIC_`, and never give
 | Setting | What is guaranteed | What can be lost |
 |---|---|---|
 | `acks=0` | Nothing | Anything; the producer never learns of a failure |
-| `acks=1` | The leader appended the batch (page cache) | Batches the leader acknowledged but no follower copied, if the leader dies (measured: `ReplicationTest`, 3 of 3 lost) |
-| `acks=all` + `min.insync.replicas=2` | Every in-sync replica has the batch before the ack | Nothing, unless every in-sync replica fails at once (measured: 10 leader kills, 0 lost) |
+| `acks=1` | The leader appended the batch (page cache) | Batches the leader acknowledged but no follower copied, if the leader dies (measured 2026-10-27: `ReplicationTest`, 3 of 3 lost) |
+| `acks=all` + `min.insync.replicas=2` | Every in-sync replica has the batch before the ack | Nothing, unless every in-sync replica fails at once (measured 2026-10-27: `LeaderKillGateTest`, 10 leader kills, 1,353,801 acknowledged on Windows and 1,480,001 on Linux, 0 lost; `chaos/run-all.sh`, five fault scenarios on the Docker cluster, 0 lost) |
 | Unclean election (opt-in) | Availability when no in-sync replica survives | Committed records the elected replica never had |
 
 **fsync policy** (`LOGFORGE_FSYNC`): the page cache already survives a process crash, because it belongs to the kernel, so a `SIGKILL` loses nothing acknowledged under any policy. fsync matters only for power loss or a kernel crash.
