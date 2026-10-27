@@ -144,6 +144,46 @@ class ClusterAuthTest {
   }
 
   @Test
+  void repeatedWrongTokensCloseTheConnection() throws Exception {
+    try (Node node = TestNodes.single(dir);
+        TestClient c = TestClient.anonymous("127.0.0.1", node.port())) {
+      assertThat(authenticate(c, "x".repeat(32)))
+          .isEqualTo(Errors.CLUSTER_AUTHORIZATION_FAILED.code());
+      assertThat(authenticate(c, "y".repeat(32)))
+          .isEqualTo(Errors.CLUSTER_AUTHORIZATION_FAILED.code());
+      c.sendRaw(
+          TestClient.frame(
+              ApiKeys.AUTHENTICATE, 99, new Authenticate.Request("z".repeat(32))::write));
+      assertThat(c.isClosedByPeer()).as("third failure closes the connection").isTrue();
+    }
+  }
+
+  @Test
+  void theClusterTokenMustDifferFromTheHttpTokens() {
+    String shared = "s".repeat(32);
+    assertThatThrownBy(
+            () ->
+                TestNodes.baseConfig(0, dir)
+                    .adminListen("127.0.0.1")
+                    .adminToken(shared)
+                    .readToken("r".repeat(32))
+                    .clusterToken(shared)
+                    .build())
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("cluster token")
+        .hasMessageNotContaining(shared);
+    assertThatThrownBy(
+            () ->
+                TestNodes.baseConfig(0, dir)
+                    .adminListen("127.0.0.1")
+                    .adminToken("a".repeat(32))
+                    .readToken(shared)
+                    .clusterToken(shared)
+                    .build())
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
   void aNodeRefusesToStartWithoutAStrongClusterToken() {
     Map<String, String> env = new HashMap<>();
     env.put("LOGFORGE_NODE_ID", "1");
