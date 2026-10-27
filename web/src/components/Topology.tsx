@@ -188,7 +188,7 @@ function ClusterGraph({
   const controller = cluster.brokers.find((b) => b.controller);
 
   const status = live
-    ? `Live: the hosted broker, ${alive} of ${brokers.length} ${brokers.length === 1 ? "node" : "nodes"} up, ${allPartitions.length} partitions, ${underReplicated} under-replicated or offline. Updated ${utc(data.fetchedAtMs)}.`
+    ? `Live: ${brokers.length === 1 ? "the hosted broker, one node" : `${alive} of ${brokers.length} brokers up`}, ${allPartitions.length} partitions, ${underReplicated} under-replicated or offline. Updated ${utc(data.fetchedAtMs)}.`
     : `Recorded, not live: the local ${brokers.length}-broker cluster as captured at ${utc(cluster.capturedAtMs)}.`;
 
   return (
@@ -349,17 +349,21 @@ export function Topology() {
   useEffect(() => {
     if (phase !== "live" || !visible) return;
     let stopped = false;
+    // Thrown errors and non-live answers count alike; enough of them and the indicator starts over.
+    const failed = () => {
+      failures.current += 1;
+      if (failures.current >= MAX_POLL_FAILURES) {
+        failures.current = 0;
+        restart();
+      }
+    };
     const tick = async () => {
       try {
         const res = await fetch("/api/cluster", { cache: "no-store" });
         const next = res.ok ? ((await res.json()) as ClusterResponse) : null;
         if (stopped) return;
         if (!next || next.source !== "live") {
-          failures.current += 1;
-          if (failures.current >= MAX_POLL_FAILURES) {
-            failures.current = 0;
-            restart(); // asleep again: the last live view stays while the indicator asks
-          }
+          failed();
           return;
         }
         failures.current = 0;
@@ -377,7 +381,7 @@ export function Topology() {
         setLive(next);
         setPollCount((c) => c + 1);
       } catch {
-        failures.current += 1;
+        if (!stopped) failed();
       }
     };
     void tick();
@@ -387,6 +391,16 @@ export function Topology() {
       window.clearInterval(id);
     };
   }, [phase, visible, restart]);
+
+  // Whenever the broker is not live (asleep again, waking), the view goes back to the recorded
+  // snapshot, labelled as recorded: never old live data under a "Live" label.
+  useEffect(() => {
+    if (phase === "live") return;
+    setLive(null);
+    setFadedIn(false);
+    setRecordedGone(false);
+    prevEnd.current.clear();
+  }, [phase]);
 
   // Cross-fade: both views share one grid cell, so the box is as tall as the taller one, and its
   // height is then held so that removing the recorded view moves nothing below it.
