@@ -65,8 +65,8 @@ final class ClientMetadata implements Closeable {
     candidates.addAll(bootstrap);
     IOException last = null;
     for (Address a : candidates) {
-      BlockingChannel ch =
-          new BlockingChannel(a.host(), a.port(), clientId, requestTimeoutMs, clusterToken);
+      // Metadata needs no cluster token, so this throwaway connection skips Authenticate.
+      BlockingChannel ch = new BlockingChannel(a.host(), a.port(), clientId, requestTimeoutMs);
       try {
         Metadata.Response md =
             Metadata.Response.read(
