@@ -23,7 +23,7 @@ How LogForge is protected, what was checked and how. The full Phase 7 audit, wit
 | S17 Source maps | see site section | `productionBrowserSourceMaps: false` in `web/next.config.ts`. |
 | S18 Default credentials | PASS | No default token; the admin server refuses to start without both (`AdminHttpServerTest.refusesToStartWithoutStrongDistinctTokens`). |
 | S19 Logs | PASS | `SecurityLimitsTest.recordContentsAndTokensNeverReachTheLogs`. |
-| S20 Dependencies | PASS (broker, client, site), accepted risk (bench) | See the dependency section. |
+| S20 Dependencies | PASS | No known vulnerabilities: broker, client, bench (kafka-clients 3.9.2) and site. See the dependency section. |
 
 ## Site
 
@@ -36,9 +36,9 @@ Filled in after the site is built and checked in a real browser (Phase 9). See `
 | Jar | Where it runs | Findings |
 |---|---|---|
 | `logforge-broker.jar` and every other jar | broker, client, tests | none |
-| `kafka-clients-3.9.0.jar` | `bench/` only, the baseline's own client | CVE-2025-27817 (SASL/OAUTHBEARER endpoint file read and SSRF), CVE-2025-27818 (SASL JAAS config via Connect or alterConfigs), CVE-2026-35554 (producer buffer-pool race when a batch expires while in flight), CVE-2026-33558 (request contents in DEBUG logs) |
+| `kafka-clients-3.9.2.jar` | `bench/` only, the baseline's own client | none (upgraded from 3.9.0, which carried CVE-2025-27817, CVE-2025-27818, CVE-2026-33558 and CVE-2026-35554; candidate scan 2026-10-27 against NVD data of 2026-10-26) |
 
-Assessment: the broker has zero runtime dependencies and none of these reach it. The bench client talks only to a throwaway local Kafka on a Docker network, with no SASL, no OAuth, no Connect and INFO logging, so the first, second and fourth do not apply. The third can misroute records only after a batch hits `delivery.timeout.ms`; the harness counts every send error, and a run with errors is not a clean measurement. The client stays on 3.9.0 to match the 3.9.0 brokers the spec names as the baseline; moving the bench to 3.9.2 or 4.x is an open decision for the owner.
+The brokers in the comparison stay Apache Kafka 3.9.0, the spec's baseline (DECISIONS.md W9).
 
 **Site** (`pnpm audit`): four postcss advisories (GHSA-qx2v-qp2m-jg93, GHSA-6g55-p6wh-862q, GHSA-fxqj-rqcc-2cmp, GHSA-r28c-9q8g-f849) came in through `next > postcss@8.4.31`. A pnpm override pins that copy to 8.5.31, the version `@tailwindcss/postcss` already used. After it: `No known vulnerabilities found`.
 

@@ -23,7 +23,7 @@
 
     <junit.version>5.10.3</junit.version>
     <assertj.version>3.27.7</assertj.version>
-    <kafka.version>3.9.0</kafka.version>
+    <kafka.version>3.9.2</kafka.version>
     <errorprone.version>2.36.0</errorprone.version>
     <jacoco.version>0.8.12</jacoco.version>
     <spotless.version>2.43.0</spotless.version>
