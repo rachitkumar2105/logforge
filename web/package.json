@@ -10,7 +10,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --test scripts/lookup.test.mjs scripts/brokerStatus.test.mjs scripts/adminUrl.test.mjs"
+    "test": "node --test scripts/lookup.test.mjs scripts/brokerStatus.test.mjs scripts/adminUrl.test.mjs scripts/benchReading.test.mjs"
   },
   "packageManager": "pnpm@9.15.4",
   "pnpm": {
