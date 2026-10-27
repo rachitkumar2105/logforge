@@ -178,7 +178,7 @@ export function Replay({ data, chaos }: { data: ReplayData | null; chaos: ChaosR
             </div>
             <Tape frame={frame} max={max} />
             <div className="mt-8 flex flex-wrap items-center gap-2">
-              <button type="button" className="btn" aria-label="Step back" onClick={() => setIdx((i) => Math.max(0, i - 1))}>
+              <button type="button" className="btn" aria-label="Step back" onClick={() => { setPlaying(false); setIdx((i) => Math.max(0, i - 1)); }}>
                 <StepBackIcon />
               </button>
               <button
@@ -197,7 +197,11 @@ export function Replay({ data, chaos }: { data: ReplayData | null; chaos: ChaosR
                 type="button"
                 className="btn"
                 aria-label="Step forward"
-                onClick={() => setIdx((i) => Math.min(frames.length - 1, i + 1))}
+                onClick={() => {
+                  // Stepping takes over from playback, as scrubbing does.
+                  setPlaying(false);
+                  setIdx((i) => Math.min(frames.length - 1, i + 1));
+                }}
               >
                 <StepForwardIcon />
               </button>
@@ -213,7 +217,7 @@ export function Replay({ data, chaos }: { data: ReplayData | null; chaos: ChaosR
                     setIdx(Number(e.target.value));
                   }}
                   aria-valuetext={`${ms(frame.t)} of ${ms(total)}`}
-                  className="w-full accent-[var(--accent)]"
+                  className="h-11 w-full accent-[var(--accent)]"
                 />
               </label>
             </div>
