@@ -10,6 +10,10 @@ import { NextResponse, type NextRequest } from "next/server";
 export function middleware(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const dev = process.env.NODE_ENV !== "production";
+  // Only over HTTPS: on plain-HTTP localhost, WebKit (unlike Chromium and Firefox) would upgrade
+  // every asset request to https:// and the page would load without its scripts and styles.
+  const https =
+    request.nextUrl.protocol === "https:" || request.headers.get("x-forwarded-proto") === "https";
   const csp = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}`,
@@ -22,7 +26,7 @@ export function middleware(request: NextRequest) {
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
-    "upgrade-insecure-requests",
+    ...(https ? ["upgrade-insecure-requests"] : []),
   ].join("; ");
 
   const requestHeaders = new Headers(request.headers);
