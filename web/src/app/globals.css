@@ -175,7 +175,8 @@ a:hover {
   font-family: var(--font-mono);
   font-size: 0.875rem;
   cursor: pointer;
-  transition: transform 150ms var(--ease-out), border-color 150ms var(--ease-out);
+  /* Only transform animates; the hover border changes instantly. */
+  transition: transform 150ms var(--ease-out);
 }
 
 .btn:hover {

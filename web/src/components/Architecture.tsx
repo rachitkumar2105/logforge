@@ -60,7 +60,8 @@ function Diagram({ step }: { step: Step }) {
           initial={{ pathLength: 0 }}
           whileInView={{ pathLength: 1 }}
           viewport={{ once: true, amount: 0.6 }}
-          transition={{ duration: 0.7, delay: 0.15 * i, ease: [0.22, 1, 0.36, 1] }}
+          // Whole entrance under 800 ms: three lines, 0.5 s each, staggered 0.1 s.
+          transition={{ duration: 0.5, delay: 0.1 * i, ease: [0.22, 1, 0.36, 1] }}
         />
       ))}
       {step.nodes.map((n) => (
