@@ -43,7 +43,7 @@ Request bodies over 64 KiB: `413 {"error":"payload_too_large"}`. Unknown paths: 
 ```json
 { "status": "ok" }
 ```
-Says only that the node is up (no node id, roles or uptime, SECURITY-AUDIT F5).
+Says only that the node is up (no node id, roles or uptime, SECURITY-AUDIT F5). Every response, on every endpoint, carries `Strict-Transport-Security: max-age=63072000; includeSubDomains` (F6).
 
 ### `GET /metrics` (read token)
 Prometheus text exposition format 0.0.4. Metric families:

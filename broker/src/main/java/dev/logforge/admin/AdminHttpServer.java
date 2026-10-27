@@ -378,6 +378,8 @@ public final class AdminHttpServer implements Closeable {
     h.set("Cache-Control", "no-store");
     h.set("Referrer-Policy", "no-referrer");
     h.set("X-Frame-Options", "DENY");
+    // TLS ends at the hosting platform's edge; browsers must not fall back to plain HTTP (F6).
+    h.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
     if (contentType != null) {
       h.set("Content-Type", contentType);
     }

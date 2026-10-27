@@ -1,4 +1,5 @@
 import "server-only";
+import { safeAdminUrl } from "./adminUrl";
 import type { PingResult } from "./brokerStatus";
 import { recordedCluster } from "./snapshot";
 import type { ClusterResponse, ClusterView } from "./types";
@@ -17,7 +18,7 @@ function fromSnapshot(reason: string): ClusterResponse {
 }
 
 async function fetchCluster(): Promise<ClusterResponse> {
-  const base = process.env.LOGFORGE_ADMIN_URL;
+  const base = safeAdminUrl(process.env.LOGFORGE_ADMIN_URL);
   const token = process.env.LOGFORGE_READ_TOKEN;
   if (!base || !token) {
     return fromSnapshot("live cluster not configured");
@@ -52,7 +53,7 @@ let healthy: number | null = null;
 
 /** Pings the admin API's public /health. A success is reused for one second. */
 export async function checkHealth(): Promise<PingResult> {
-  const base = process.env.LOGFORGE_ADMIN_URL;
+  const base = safeAdminUrl(process.env.LOGFORGE_ADMIN_URL);
   if (!base || !process.env.LOGFORGE_READ_TOKEN) {
     return { ok: false, reason: "not-configured" };
   }
