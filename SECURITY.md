@@ -46,6 +46,8 @@ Assessment: the broker has zero runtime dependencies and none of these reach it.
 
 - **F4, rate limits live in memory on each node.** The admin API's per-IP and per-token buckets (`admin/RateLimiter.java`) are not shared. Only the controller serves the cluster API, so its limits are effectively global today; on Render it is the only node. If the admin API were ever replicated behind a load balancer, each replica would allow the full rate and the limits would need a shared store. Also, behind Render's proxy every request reaches the node from the proxy's address, so the per-IP bucket is shared by all callers there; the per-token bucket and the site's 1 to 2 s server-side cache keep the site well inside it.
 
+- **F7, no backups.** Durability rests on replication across three brokers and on Docker volumes; nothing copies partition data or the controller's `metadata.json` elsewhere. Losing the Docker host loses everything. The hosted Render broker keeps no disk at all and re-seeds `demo-orders` on every start, by design. Nothing in this project holds data anyone depends on; anyone who reuses it for real data must add volume snapshots and a copy of `metadata.json`.
+
 ## Reporting a problem
 
 Open an issue on the GitHub repository; do not include secrets.
