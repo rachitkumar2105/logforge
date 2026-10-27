@@ -17,6 +17,23 @@ This audit does not establish that the project is secure. It lists what was chec
 | F7 | No backups of partition data or controller metadata; durability rests on replication and Docker volumes. | `docker-compose.yml` (named volumes) | Low for a demo | Losing the Docker host loses all data, including `metadata.json`. | Document; snapshot volumes in the hosted deployment if data matters. |
 | F8 | Unused code (listed, not deleted): `ProducerStateManager.producerCount()`, `NioServer.everMutedConnections()`, `LogSegment.batchesFrom()`, `ReplicaFetcherManager.fetcherCount()`, `JsonLog.isDebugEnabled()`. | as named | Info | None directly; dead code widens the surface to review. | Remove, or use them in metrics, after approval. |
 
+## Status after fixes (2026-10-27)
+
+The owner approved fixing F1 to F8, one concern per commit.
+
+| # | Status | Commit | Evidence |
+|---|---|---|---|
+| F1 | Fixed | `8d5046b` | Authenticate (API 102) with `LOGFORGE_CLUSTER_TOKEN`, required at startup; topic admin, BrokerHeartbeat, AlterIsr, OffsetForLeaderEpoch and follower Fetch refused otherwise (`ClusterAuthTest` 5/5). Docker cluster leader-kill rerun PASS with 0 refused authentications (`46aefe9`). The token is not encryption: 9092 must still stay on a private network. |
+| F2 | Fixed | `c60e9b4` | 10,000 connections total, 1,000 per address, refused at accept and counted (`ConnectionLimitsTest` 2/2). |
+| F3 | Fixed | `8cf23e9` | Status JSON over 1 MiB dropped, heartbeat still counts (`ControllerStatusLimitTest` 1/1). |
+| F4 | Accepted, documented | `5f71b4b` | SECURITY.md, accepted risks. |
+| F5 | Fixed | `c38c4b7` | `/health` returns only `{"status":"ok"}`, also answers HEAD (`AdminHttpServerTest`). |
+| F6 | Fixed | `b0ec036` | HSTS on every admin response; the site refuses a non-HTTPS admin URL outside localhost (`adminUrl.test.mjs`). Production: Render redirects HTTP to HTTPS (301). |
+| F7 | Accepted, documented | `95cee28` | SECURITY.md, accepted risks. |
+| F8 | Fixed | `563481c` | Four methods removed; `LogSegment.batchesFrom` kept, now used by the bench's segment sample. |
+
+Found while fixing: `Node.close` did not wait for background threads, so a late metadata update could touch a log after it was closed (`8b1794b`).
+
 ## S1 to S20
 
 | Item | Verdict | Evidence |

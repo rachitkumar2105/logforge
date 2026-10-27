@@ -4,7 +4,7 @@ How LogForge is protected, what was checked and how. The full Phase 7 audit, wit
 
 ## Model
 
-- **Broker protocol (port 9092)**: unauthenticated and unencrypted. It must only be reachable on a private network. Docker Compose puts every broker on an internal network with no published ports (audit F1 describes what an attacker on that network could do).
+- **Broker protocol (port 9092)**: unencrypted. The cluster's own operations (topic administration, broker registration, ISR changes, follower replication) need the cluster token (`LOGFORGE_CLUSTER_TOKEN`, Authenticate API, audit F1); producing and consuming do not. Because the token travels in clear text, the port must only be reachable on a private network: Docker Compose publishes no broker port and Render routes only the admin API.
 - **Admin HTTP API (8080)**: two bearer tokens from the environment. The read token can only GET; mutations need the admin token. Only the controller's admin API is published, on `127.0.0.1` locally and behind the platform's TLS edge in a deployment.
 - **Website**: holds no secret in the browser. The read token lives in a server-side route handler; the visitor's browser only calls `/api/cluster` on the site's own origin.
 
@@ -14,11 +14,11 @@ How LogForge is protected, what was checked and how. The full Phase 7 audit, wit
 |---|---|---|
 | S2 XSS | see site section | Broker JSON escapes `<`, `>`, `&` (`Json.quote`, `JsonLogTest`). Site: React escaping only, `react/no-danger` lint rule, `git grep dangerouslySetInnerHTML` empty, nonce CSP. |
 | S4 Payload limits | PASS | Frame size checked before allocation (`NioServerTest`), batch cap (`SingleBrokerTest`), fetch responses capped at 8 MiB (`SecurityLimitsTest`), admin bodies 64 KiB (`AdminHttpServerTest`). |
-| S6 Rate limiting | PASS (admin API) | Per-IP and per-token buckets, 429 with `Retry-After` (`AdminHttpServerTest`). Binary protocol has no limits (audit F2). |
+| S6 Rate limiting | PASS (admin API), partial (binary protocol) | Admin API: per-IP and per-token buckets, 429 with `Retry-After` (`AdminHttpServerTest`). Binary protocol: connection caps per address and in total (`ConnectionLimitsTest`, F2); no request-rate limit. |
 | S8 API secrets | PASS (broker) | Tokens only from env; refusal messages name the variable, never the value; gitleaks clean over all history. |
 | S11 CORS | PASS | Exact allowlist, never `*`, wildcard refused at startup (`AdminHttpServerTest`). |
 | S12 Web storage | see site section | |
-| S13 Server-side permissions | PASS (admin API), FAIL (binary protocol, F1) | Read token gets 403 on create and delete (`AdminHttpServerTest.theReadTokenCannotMutateButTheAdminTokenCan`). |
+| S13 Server-side permissions | PASS | Admin API: read token gets 403 on create and delete (`AdminHttpServerTest.theReadTokenCannotMutateButTheAdminTokenCan`). Binary protocol: cluster operations refused without the cluster token (`ClusterAuthTest`, F1). |
 | S16 SSRF | PASS | No endpoint fetches a user-supplied URL; the site's route handler fetches only `LOGFORGE_ADMIN_URL` from server config. |
 | S17 Source maps | see site section | `productionBrowserSourceMaps: false` in `web/next.config.ts`. |
 | S18 Default credentials | PASS | No default token; the admin server refuses to start without both (`AdminHttpServerTest.refusesToStartWithoutStrongDistinctTokens`). |
