@@ -33,7 +33,9 @@ class ControllerStatusLimitTest {
     now.addAndGet(2_000);
     String huge = "{\"pad\":\"" + "x".repeat(Controller.MAX_STATUS_BYTES) + "\"}";
     controller.heartbeat(heartbeat(huge));
-    assertThat(controller.brokerStatuses().get(1)).as("previous status kept").isEqualTo("{\"ok\":1}");
+    assertThat(controller.brokerStatuses().get(1))
+        .as("previous status kept")
+        .isEqualTo("{\"ok\":1}");
     assertThat(controller.heartbeatAges().get(1)).as("heartbeat still counted").isZero();
 
     now.addAndGet(2_000);

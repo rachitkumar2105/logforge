@@ -36,6 +36,10 @@ public final class Controller {
 
   private final int nodeId;
   private final ClusterState state;
+
+  /** Largest broker status JSON the controller keeps (SECURITY-AUDIT F3). */
+  public static final int MAX_STATUS_BYTES = 1024 * 1024;
+
   private final LongSupplier clock;
   private final long sessionTimeoutMs;
   private final int offsetsPartitions;
@@ -122,7 +126,11 @@ public final class Controller {
       changed = true;
     }
     b.lastHeartbeatMs = now;
-    if (req.status() != null) {
+    if (req.status() != null && req.status().remaining() > MAX_STATUS_BYTES) {
+      // SECURITY-AUDIT F3: kept per broker, so bounded. The heartbeat still counts.
+      LOG.warn(
+          "broker status too large, dropped", "broker", b.id, "bytes", req.status().remaining());
+    } else if (req.status() != null) {
       ByteBuffer s = req.status().duplicate();
       byte[] bytes = new byte[s.remaining()];
       s.get(bytes);
