@@ -6,19 +6,19 @@ Checked on 2026-10-26 with `playwright-cli` 0.1.22 (Chromium, headless) against 
 
 ### Screenshots at nine widths (dark, broker live)
 
-Full-page JPEGs of production (`https://logforge-five.vercel.app`, live hosted broker), retaken on 2026-10-27 after the review fixes, after scrolling the whole page once so scroll reveals have played. Horizontal overflow measured as `scrollWidth > clientWidth`. The reduced-motion pages below were retaken from production at the same time.
+Full-page JPEGs of production (`https://logforge-five.vercel.app`, live hosted broker), retaken on 2026-10-27 from the final build on `main` (`bd6e791`), after scrolling the whole page once so scroll reveals have played. Horizontal overflow measured as `scrollWidth > clientWidth`. The reduced-motion pages below were retaken from production at the same time.
 
 | Width | File | Page height | Horizontal overflow |
 |---|---|---|---|
-| 375 | [home-375.jpg](docs/demo/home-375.jpg) | 12,648 px | none |
-| 414 | [home-414.jpg](docs/demo/home-414.jpg) | 11,973 px | none |
-| 768 | [home-768.jpg](docs/demo/home-768.jpg) | 9,909 px | none |
-| 1024 | [home-1024.jpg](docs/demo/home-1024.jpg) | 8,304 px | none |
-| 1280 | [home-1280.jpg](docs/demo/home-1280.jpg) | 8,202 px | none |
-| 1440 | [home-1440.jpg](docs/demo/home-1440.jpg) | 8,159 px | none |
-| 1920 | [home-1920.jpg](docs/demo/home-1920.jpg) | 8,168 px | none |
-| 2560 | [home-2560.jpg](docs/demo/home-2560.jpg) | 8,168 px | none |
-| 3440 | [home-3440.jpg](docs/demo/home-3440.jpg) | 8,168 px | none |
+| 375 | [home-375.jpg](docs/demo/home-375.jpg) | 12,836 px | none |
+| 414 | [home-414.jpg](docs/demo/home-414.jpg) | 12,139 px | none |
+| 768 | [home-768.jpg](docs/demo/home-768.jpg) | 9,968 px | none |
+| 1024 | [home-1024.jpg](docs/demo/home-1024.jpg) | 8,370 px | none |
+| 1280 | [home-1280.jpg](docs/demo/home-1280.jpg) | 8,270 px | none |
+| 1440 | [home-1440.jpg](docs/demo/home-1440.jpg) | 8,226 px | none |
+| 1920 | [home-1920.jpg](docs/demo/home-1920.jpg) | 8,235 px | none |
+| 2560 | [home-2560.jpg](docs/demo/home-2560.jpg) | 8,235 px | none |
+| 3440 | [home-3440.jpg](docs/demo/home-3440.jpg) | 8,235 px | none |
 
 The first pass found 375 and 414 px overflowing to 528 px (the end-to-end latency table widened its grid cell); fixed in `9ab0a42` and re-shot above.
 
@@ -69,10 +69,17 @@ Every visible text node's colour against its composited background, WCAG thresho
 - Lighthouse mobile (PageSpeed Insights, 02:36): Performance 98, Accessibility 100, Best Practices 100, SEO 100.
 - Correction: the local contrast scan above skipped text under full opacity. Lighthouse found pending replay events at 40% opacity below 4.5:1; they are now muted by colour, and an opacity-aware rescan of production found 0 of 326 below threshold in each scheme.
 
+### Final pass on main (2026-10-27)
+
+- **Beyond Chromium**: desktop Chromium, Firefox 156 and WebKit 26.6 at 1440×900, plus iPhone 15 (WebKit) and Pixel 7 (Chromium) emulation with touch, against production: live topology within 1.2 to 1.7 s, topology table, replay step (now pauses playback) and scrub to end, segment explorer lookup, benchmark switches, tape toggle; no console errors, no horizontal overflow, no touch target under 24 px in any of the five.
+- **Found and fixed by those runs**: replay stepping did not pause autoplay; header links and the replay scrubber were under 24 px; WebKit on plain-HTTP localhost loaded no assets because of `upgrade-insecure-requests` (now only over HTTPS); the new comparison column widened the page to 391 px at 375 (caught by the production screenshot pass).
+- **Lighthouse** (PageSpeed Insights, mobile, production, 1:31:58 PM): Performance 100, Accessibility 100, Best Practices 100, SEO 100.
+- **Broker suspended** (final build): first paint 1,024 ms with every section; checking, waking 3,524 ms, asleep 91,519 ms; layout shift 0; console clean.
+- **Console sweep** of production (16 loads): clean on every real page.
+
 ## Not verified / assumed
 
-- Only Chromium. Safari and Firefox were not checked.
-- Headless screenshots, not a physical phone. Touch behaviour and real mobile performance are not verified.
+- Real phones were not tested; iPhone and Android were Playwright emulation on a desktop. Safari itself was not run; WebKit is its engine.
 - Render's real cold start after 15 idle minutes was not timed; suspension and resume were.
 - The light-scheme state screenshots predate two copy changes (hero note, the "one-minute moving average" label); layout is unchanged.
 - The web-design-guidelines and animation reviews named in the Phase 9 gate are not part of this report yet.
