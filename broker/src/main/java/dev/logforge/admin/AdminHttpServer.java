@@ -43,12 +43,6 @@ public final class AdminHttpServer implements Closeable {
 
   /** Everything the API reads from the node. */
   public interface Source {
-    int nodeId();
-
-    List<String> roles();
-
-    long uptimeMs();
-
     Controller controller();
 
     Map<String, Object> localStatus();
@@ -158,19 +152,13 @@ public final class AdminHttpServer implements Closeable {
         rateLimited(ex, wait);
         return;
       }
-      if ("/health".equals(path) && "GET".equals(method)) {
-        sendJson(
-            ex,
-            200,
-            Json.obj(
-                "status",
-                "ok",
-                "nodeId",
-                source.nodeId(),
-                "roles",
-                source.roles(),
-                "uptimeMs",
-                source.uptimeMs()));
+      // Public, so it says only that the node is up (SECURITY-AUDIT F5). HEAD for uptime monitors.
+      if ("/health".equals(path) && ("GET".equals(method) || "HEAD".equals(method))) {
+        if ("HEAD".equals(method)) {
+          send(ex, 200, "application/json; charset=utf-8", null);
+        } else {
+          sendJson(ex, 200, Json.obj("status", "ok"));
+        }
         return;
       }
       Access access = authenticate(ex);
@@ -596,28 +584,10 @@ public final class AdminHttpServer implements Closeable {
 
   /** Convenience for wiring: a Source from lambdas. */
   public static Source source(
-      int nodeId,
-      List<String> roles,
-      Supplier<Long> uptime,
       Supplier<Controller> controller,
       Supplier<Map<String, Object>> local,
       Supplier<String> prometheus) {
     return new Source() {
-      @Override
-      public int nodeId() {
-        return nodeId;
-      }
-
-      @Override
-      public List<String> roles() {
-        return roles;
-      }
-
-      @Override
-      public long uptimeMs() {
-        return uptime.get();
-      }
-
       @Override
       public Controller controller() {
         return controller.get();

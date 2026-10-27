@@ -39,10 +39,11 @@ Request bodies over 64 KiB: `413 {"error":"payload_too_large"}`. Unknown paths: 
 
 ## Endpoints
 
-### `GET /health` (public)
+### `GET /health`, `HEAD /health` (public)
 ```json
-{ "status": "ok", "nodeId": 0, "roles": ["controller"], "uptimeMs": 81234 }
+{ "status": "ok" }
 ```
+Says only that the node is up (no node id, roles or uptime, SECURITY-AUDIT F5).
 
 ### `GET /metrics` (read token)
 Prometheus text exposition format 0.0.4. Metric families:

@@ -65,7 +65,6 @@ public final class Node implements AutoCloseable {
   private ReplicaFetcherManager fetchers;
   private GroupCoordinator groupCoordinator;
   private final Metrics metrics = new Metrics(System::currentTimeMillis);
-  private final long startedAtMs = System.currentTimeMillis();
   private AdminHttpServer admin;
 
   private Node(NodeConfig config) {
@@ -170,16 +169,7 @@ public final class Node implements AutoCloseable {
     if (config.adminEnabled()) {
       admin =
           new AdminHttpServer(
-              config,
-              AdminHttpServer.source(
-                  config.nodeId,
-                  config.roles.stream()
-                      .map(r -> r.name().toLowerCase(java.util.Locale.ROOT))
-                      .toList(),
-                  () -> System.currentTimeMillis() - startedAtMs,
-                  () -> controller,
-                  this::statusJson,
-                  metrics::render));
+              config, AdminHttpServer.source(() -> controller, this::statusJson, metrics::render));
       admin.start();
     }
     if (replicaManager != null) {
