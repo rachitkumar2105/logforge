@@ -1,0 +1,134 @@
+# Final audit
+
+State of `build/v1` on 2026-10-27, pushed to `github.com/rachitkumar2105/logforge`. Production: site `https://logforge-five.vercel.app` (Vercel Hobby), broker `https://logforge-broker.onrender.com` (Render free, one node). Every claim below points at a test, a recorded run or a command; anything not checked is listed as such. This audit does not claim the project is secure or launch-ready.
+
+## Phase gates
+
+| Phase | Gate | Status | Evidence |
+|---|---|---|---|
+| 0 Foundation | CI green; PROTOCOL.md complete enough for a third-party client | Met | GitHub Actions `ci` green on every push since the first fix (latest run 40432397335 on `116e784`). `ThirdPartyProtocolTest` builds frames from PROTOCOL.md alone. |
+| 1 Record format | Corruption detection and offset lookup proven by test | Met | `RecordBatchTest`, `OffsetIndexTest`, `LogSegmentTest` (RUN-REPORT Phase 1). |
+| 2 Log and recovery | SIGKILL recovery test passes 10 consecutive runs | Met | `LogCrashRecoveryTest` 10×10 on Windows and Linux, 11 torn tails truncated, no acknowledged record lost (RUN-REPORT Phase 2). |
+| 3 Network | 1 million records, zero loss, zero duplicates at acks=1 | Met | `MillionRecordsTest`: `distinct=1000000, duplicates=0` (RUN-REPORT Phase 3). |
+| 4 Replication | Zero acknowledged loss at acks=all across 10 leader kills | Met | `LeaderKillGateTest`: 10 cycles, `missingAcked=0 duplicates=0`, Windows and Linux (RUN-REPORT Phase 4). |
+| 5 Groups, compaction | Exactly-once per partition under forced retry | Met | `ProducerRetryDedupTest`: 1 copy with idempotence, 2 without (control). |
+| 6 Observability | Coverage gate; CI green; pushed | Met | `./mvnw verify`: `All coverage checks have been met.` (log 0.860, replication 0.881, minimum 0.80). Pushed; CI green. |
+| 7 Security | `/security-audit` run and committed; every FAIL fixed or accepted in writing | Met | `SECURITY-AUDIT.md` F1 to F8: six fixed, two accepted with reasons (`SECURITY.md`), owner-approved. |
+| 8 Bench and chaos | Results from real runs; zero acknowledged loss at acks=all in every chaos scenario | Met | `bench/results/` (22 results), `chaos/results/` (5 scenarios, all PASS, 0 missing). |
+| 9 Site | Nine-width screenshots, reduced-motion run, Tab walk, clean console, Lighthouse ≥90 performance and accessibility on mobile | Met | `DEMO-REPORT.md`; Lighthouse via PageSpeed Insights, mobile, production: Performance 98, Accessibility 100, Best Practices 100, SEO 100. |
+| 10 Deploy | Production loads clean; live topology shows the real deployed cluster; site correct with the cluster stopped | Met, single node | Production checked in Chromium, live and with the Render service suspended (`RUN-REPORT.md` Phase 10). The hosted cluster is one broker, as the spec allows beyond the free tier; the three-node behaviour is the recorded replay. |
+| 11 Final audit | FINAL-AUDIT.md and INTERVIEW.md committed | Met | This file; `docs/INTERVIEW.md` (20 answers, numbers from `bench/results`). |
+
+Not launch-ready (spec Phase 10): there is no custom domain, and the privacy and terms pages are drafts labelled "not legal advice". Both are open items for the owner.
+
+## Test suite
+
+`./mvnw -B -ntp verify`, last run after all fixes: BUILD SUCCESS. Broker 112 tests, client 12 (1 skipped: the SIGSTOP test needs Linux and passed there in Phase 4), bench 1. Site: `pnpm lint`, `pnpm typecheck`, `pnpm test` (11 tests), `pnpm audit` (no known vulnerabilities), `pnpm build`, all clean; CI runs the same.
+
+Line coverage (JaCoCo, broker):
+
+| Package | Line coverage | Lines |
+|---|---|---|
+| `dev.logforge` | 0.777 | 644/829 |
+| `dev.logforge.admin` | 0.884 | 488/552 |
+| `dev.logforge.controller` | 0.910 | 364/400 |
+| `dev.logforge.coordinator` | 0.857 | 361/421 |
+| `dev.logforge.log` | 0.860 | 1172/1362 |
+| `dev.logforge.network` | 0.865 | 351/406 |
+| `dev.logforge.network.protocol` | 0.980 | 674/688 |
+| `dev.logforge.replication` | 0.881 | 852/967 |
+| `dev.logforge.util` | 0.849 | 236/278 |
+
+The gate (0.80) applies to `log` and `replication`.
+
+## Security checklist (S1 to S20)
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| S1 SQL injection | N/A | No database. |
+| S2 XSS | PASS | React escaping only, `react/no-danger` lint rule, no `dangerouslySetInnerHTML`; nonce CSP on every page (all routes rendered per request); broker JSON escapes `<`, `>`, `&`. |
+| S3 CSRF | N/A | No cookie authentication anywhere; the admin API takes bearer tokens. |
+| S4 Payload limits | PASS | Frame size checked before allocation, batch cap, 8 MiB fetch cap, 64 KiB admin bodies, 1 MiB broker status (F3). |
+| S5 BOLA/IDOR | N/A | No user-owned objects. |
+| S6 Rate limiting | PASS (admin API), partial (binary protocol) | 429 with `Retry-After` per IP and per token; binary protocol: connection caps (F2) and three failed authentications close a connection, no request-rate limit. |
+| S7 JWT | N/A | Not used. |
+| S8 API secrets | PASS | Tokens from the environment only, generated by Render in production; the read token stays in the site's server-side route handlers; gitleaks: 68 commits, no leaks. |
+| S9 Password hashing | N/A | No passwords. |
+| S10 MFA | N/A | No accounts. |
+| S11 CORS | PASS | Exact allowlist, wildcard refused at startup; production origin set through `render.yaml`. |
+| S12 Web storage | PASS | The site stores no token in the browser. |
+| S13 Server-side permissions | PASS | Read token cannot mutate (`AdminHttpServerTest`); binary-protocol cluster operations need the cluster token (`ClusterAuthTest`, F1). |
+| S14 Row-level security | N/A | No database. |
+| S15 Webhooks | N/A | None. |
+| S16 SSRF | PASS | No endpoint fetches a user-supplied URL; the site's admin URL comes from server configuration and must be HTTPS outside localhost (F6). |
+| S17 Source maps | PASS | `productionBrowserSourceMaps: false`. |
+| S18 Default credentials | PASS | No default tokens; nodes refuse to start without strong, distinct tokens. |
+| S19 Logs | PASS | No record contents or tokens in logs (`SecurityLimitsTest`); refused authentication logs only the client address. |
+| S20 Dependencies | PASS (broker, client, site), accepted risk (bench) | OWASP dependency-check: only `kafka-clients` 3.9.0, bench-only, triaged in `SECURITY.md`; `pnpm audit` clean. |
+
+Headers checked in production: Vercel serves a per-request nonce CSP, HSTS, `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`; the admin API adds HSTS and redirects HTTP to HTTPS (Render, 301).
+
+## Benchmarks
+
+`bash bench/run.sh` (WARMUP=5 MEASURE=20), 2026-10-26, both systems on one i7-1255U laptop (10 cores, 15.7 GiB) under Docker Desktop (WSL 2), three brokers each, 1 GiB heaps, keyed records, 64 KB batches, 5 ms linger, no compression, replication factor 3. Produce p99 includes time queued in the client.
+
+| Configuration | LogForge records/s | MB/s | p99 ms | Kafka 3.9.0 records/s | MB/s | p99 ms |
+|---|---|---|---|---|---|---|
+| 100 B, acks=1 | 288,254 | 28.83 | 875 | 248,704 | 24.87 | 951 |
+| 1 KB, acks=1 (baseline) | 48,499 | 49.66 | 1034 | 39,905 | 40.86 | 1110 |
+| 10 KB, acks=1 | 5,077 | 51.99 | 1019 | 7,583 | 77.65 | 551 |
+| acks=0 | 75,216 | 77.02 | 830 | 101,859 | 104.3 | 437 |
+| acks=all | 41,481 | 42.48 | 760 | 67,103 | 68.71 | 554 |
+| 1 partition | 44,608 | 45.68 | 956 | 78,770 | 80.66 | 241 |
+| 16 partitions | 77,226 | 79.08 | 1328 | 109,568 | 112.2 | 423 |
+| fsync never (same config as baseline) | 75,181 | 76.99 | 588 | 75,149 | 76.95 | 588 |
+| fsync every 1 s | 52,994 | 54.27 | 769 | 87,350 | 89.45 | 449 |
+| fsync every batch | 3,630 | 3.72 | 6211 | 2,410 | 2.47 | 7962 |
+
+End to end at 1,000 records/s, acks=all: send to receive p50 18.2 ms (LogForge) and 6.9 ms (Kafka); acknowledgement to receive p50 10.0 ms and 0.3 ms.
+
+Reading: the baseline and fsync-never rows are the same configuration measured minutes apart and differ by up to 1.9x, so only large, consistent gaps mean anything. Kafka is ahead by 1.5x to 1.8x at acks=all, with one partition and with 10 KB records; the causes stated on the site and in INTERVIEW Q20 come from reading the code, not from profiling. One run per configuration, no error bars.
+
+## Chaos
+
+`bash chaos/run-all.sh` on the Compose cluster (rf=3, min.insync.replicas=2, idempotent acks=all producer at 2,000 records/s). Recovery time is the longest gap between acknowledgements.
+
+| Scenario | Fault | Acked | Missing | Duplicates | Recovery | Verdict | Run |
+|---|---|---|---|---|---|---|---|
+| leader-kill | SIGKILL the partition leader mid-write, restart it 15 s later | 64,294 | 0 | 0 | 5.22 s | PASS | 2026-10-27, with cluster authentication |
+| follower-pause | SIGSTOP a follower for 15 s, then resume | 83,910 | 0 | 0 | 3.06 s | PASS | 2026-10-26 (5 repeats, all PASS) |
+| disk-full | broker3's data volume is a 48 MiB tmpfs that fills | 84,785 | 0 | 0 | 0.52 s | PASS | 2026-10-26 |
+| network-partition | Cut the leader off the cluster network for 15 s | 84,896 | 0 | 0 | 10.75 s | PASS | 2026-10-26 |
+| restart-under-load | Graceful restart of the leader under load | 53,183 | 0 | 0 | 0.94 s | PASS | 2026-10-26 |
+
+## Repository size
+
+`du -sh --exclude=.git .` on a fresh clone of `build/v1` (2026-10-27): **9.2 MB** (limit 25 MB); `.git` 11 MB. The working copy measures 737 MB only because of gitignored build output (`node_modules`, `.next`, `target`).
+
+## Verified
+
+- All twelve gates above, with the commands and tests named; CI green on GitHub.
+- Production in Chromium: live state, cold-start states, the Render service suspended and resumed, console clean, Lighthouse mobile 98/100/100/100.
+- Hosted broker under Render-like limits (512 MB, 0.1 CPU): 333,331 records at 500/s for 10 minutes, peak 55 MiB, no OOM (`bench/results/hosted-512mb.txt`).
+- Security findings F1 to F8 resolved as recorded in `SECURITY-AUDIT.md`; the leader-kill chaos run repeated after F1 passed.
+
+## Not verified / assumed
+
+- The benchmark and four of the five chaos scenarios ran before the cluster token (F1) existed. F1 adds one Authenticate round trip per broker connection and none on the produce or consume path, so the numbers are assumed to still hold; only leader-kill was rerun.
+- One unexplained follower-pause run (leadership moved; not reproduced in four repeats; logs not kept).
+- Real Render behaviour after 15 idle minutes (the first request's wait) was not timed; suspension and resume were.
+- Browsers other than Chromium, and real phones.
+- Legal review of the privacy and terms drafts.
+
+## Limitations (also on the site and in DECISIONS.md)
+
+A single fixed controller with no consensus; no TLS on the binary protocol and only a shared cluster token for cluster operations, so port 9092 must stay private; no zero-copy, no compression, no transactions; consumer groups without cooperative rebalancing; compaction that rescans the whole partition; the hosted demo is one ephemeral broker.
+
+## Open items for the owner
+
+1. Custom domain (Vercel) and, if wanted, the broker under it.
+2. Legal review of the privacy and terms drafts.
+3. Add the Preview environment to the two Vercel variables, so PR previews reach the broker (Production only today).
+4. Set the GitHub repository variable `BROKER_URL` so the daily uptime check runs.
+5. Decide whether the bench's Kafka client should move from 3.9.0 (four CVEs, bench only) to 3.9.2 or 4.x.
+6. Merge `build/v1` into a `main` branch when ready; nothing has been merged.
