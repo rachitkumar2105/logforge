@@ -66,12 +66,14 @@ run_scenario() {
     -e LOGFORGE_CLUSTER_TOKEN logforge-bench \
     chaos-produce --bootstrap "$BOOT" --topic "$topic" --acks "/work/$name.acks" --stop "/work/$name.stop" \
     --rate 2000 --partitions 3 --size "$size" >/dev/null
+  # Record the controller's cluster view every 200 ms in every scenario: broker liveness and
+  # heartbeat age, leaders, ISRs and each replica's log end offset and high watermark. The
+  # leader-kill timeline also becomes the website's crash-recovery replay.
+  docker rm -f chaos-recorder >/dev/null 2>&1 || true
+  rm -f "$WORK/$name.timeline"
+  docker run -d --name chaos-recorder --network logforge_cluster -v "$WORK_MOUNT:/work"     -e LOGFORGE_READ_TOKEN logforge-bench     chaos-record --admin http://controller:8080 --out "/work/$name.timeline" --stop "/work/$name.stop" >/dev/null
   local replay_args=()
   if [ "$name" = "leader-kill" ]; then
-    # Record the cluster view every 200 ms for the website's crash-recovery replay.
-    docker rm -f chaos-recorder >/dev/null 2>&1 || true
-    rm -f "$WORK/$name.timeline"
-    docker run -d --name chaos-recorder --network logforge_cluster -v "$WORK_MOUNT:/work"       -e LOGFORGE_READ_TOKEN logforge-bench       chaos-record --admin http://controller:8080 --out "/work/$name.timeline" --stop "/work/$name.stop" >/dev/null
     replay_args=(--timeline "/work/$name.timeline" --replay "/results/$name-replay.json")
   fi
   sleep 10
@@ -84,7 +86,7 @@ run_scenario() {
   docker wait chaos-producer >/dev/null
   docker logs chaos-producer 2>&1 | grep -E "chaos-produce" || true
   docker rm chaos-producer >/dev/null
-  if [ "$name" = "leader-kill" ]; then docker wait chaos-recorder >/dev/null; docker rm chaos-recorder >/dev/null; fi
+  docker wait chaos-recorder >/dev/null; docker rm chaos-recorder >/dev/null
   docker run --rm --network logforge_cluster -v "$WORK_MOUNT:/work" -v "$RESULTS_MOUNT:/results" \
     -e BENCH_HOST="$BENCH_HOST" -e BENCH_ENV="$BENCH_ENV" -e LOGFORGE_CLUSTER_TOKEN logforge-bench \
     chaos-verify --bootstrap "$BOOT" --topic "$topic" --acks "/work/$name.acks" --partitions 3 \
