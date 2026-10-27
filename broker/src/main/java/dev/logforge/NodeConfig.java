@@ -40,6 +40,8 @@ public final class NodeConfig {
   public final double ratePerToken;
   public final int ioThreads;
   public final int handlerThreads;
+  public final int maxConnections;
+  public final int maxConnectionsPerIp;
   public final int maxRequestBytes;
   public final int maxQueuedResponsesPerConnection;
   public final long heartbeatIntervalMs;
@@ -81,6 +83,8 @@ public final class NodeConfig {
     this.ratePerToken = b.ratePerToken;
     this.ioThreads = b.ioThreads;
     this.handlerThreads = b.handlerThreads;
+    this.maxConnections = b.maxConnections;
+    this.maxConnectionsPerIp = b.maxConnectionsPerIp;
     this.maxRequestBytes = b.maxRequestBytes;
     this.maxQueuedResponsesPerConnection = b.maxQueuedResponsesPerConnection;
     this.heartbeatIntervalMs = b.heartbeatIntervalMs;
@@ -191,6 +195,12 @@ public final class NodeConfig {
     if (env.containsKey("LOGFORGE_HANDLER_THREADS")) {
       b.handlerThreads(Integer.parseInt(env.get("LOGFORGE_HANDLER_THREADS")));
     }
+    if (env.containsKey("LOGFORGE_MAX_CONNECTIONS")) {
+      b.maxConnections(Integer.parseInt(env.get("LOGFORGE_MAX_CONNECTIONS")));
+    }
+    if (env.containsKey("LOGFORGE_MAX_CONNECTIONS_PER_IP")) {
+      b.maxConnectionsPerIp(Integer.parseInt(env.get("LOGFORGE_MAX_CONNECTIONS_PER_IP")));
+    }
     if (env.containsKey("LOGFORGE_HEARTBEAT_MS")) {
       b.heartbeatIntervalMs(Long.parseLong(env.get("LOGFORGE_HEARTBEAT_MS")));
     }
@@ -249,6 +259,8 @@ public final class NodeConfig {
     private double ratePerToken = 50;
     private int ioThreads = Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
     private int handlerThreads = Math.max(4, Runtime.getRuntime().availableProcessors());
+    private int maxConnections = 10_000;
+    private int maxConnectionsPerIp = 1_000;
     private int maxRequestBytes = 16 * 1024 * 1024;
     private int maxQueuedResponsesPerConnection = 16;
     private long heartbeatIntervalMs = 250;
@@ -335,6 +347,16 @@ public final class NodeConfig {
 
     public Builder ratePerToken(double v) {
       ratePerToken = v;
+      return this;
+    }
+
+    public Builder maxConnections(int v) {
+      maxConnections = v;
+      return this;
+    }
+
+    public Builder maxConnectionsPerIp(int v) {
+      maxConnectionsPerIp = v;
       return this;
     }
 
@@ -435,6 +457,9 @@ public final class NodeConfig {
       }
       if (!roles.contains(Role.CONTROLLER) && controllerHost == null) {
         throw new IllegalArgumentException("a broker-only node needs the controller address");
+      }
+      if (maxConnections < 1 || maxConnectionsPerIp < 1) {
+        throw new IllegalArgumentException("connection limits must be positive");
       }
       if (maxRequestBytes < 1024) {
         throw new IllegalArgumentException("maxRequestBytes too small");

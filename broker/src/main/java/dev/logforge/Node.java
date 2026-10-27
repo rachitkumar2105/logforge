@@ -155,6 +155,7 @@ public final class Node implements AutoCloseable {
             config.maxQueuedResponsesPerConnection,
             apis,
             handlerPool);
+    server.setConnectionLimits(config.maxConnections, config.maxConnectionsPerIp);
     server.start();
     if (controller != null) {
       controller.setSelfAddress(config.advertisedHost, advertisedPort());
@@ -489,6 +490,12 @@ public final class Node implements AutoCloseable {
 
   /** Scrape-time gauges computed from live partition and group state. */
   private void registerGauges() {
+    metrics.gauge(
+        "logforge_connections_refused_total",
+        "Connections closed at accept time because a connection limit was reached.",
+        () ->
+            List.of(
+                new Metrics.Sample(Map.of(), server == null ? 0 : server.refusedConnections())));
     metrics.gauge(
         "logforge_isr_size",
         "In-sync replicas per partition this broker leads.",
