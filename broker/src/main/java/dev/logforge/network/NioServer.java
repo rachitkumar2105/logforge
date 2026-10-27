@@ -70,7 +70,7 @@ public final class NioServer implements Closeable {
   private final AtomicInteger mutedConnections = new AtomicInteger();
   // SECURITY-AUDIT F2: caps on concurrent connections, counted from accept to close.
   private final AtomicInteger accepted = new AtomicInteger();
-  private final java.util.concurrent.ConcurrentHashMap<java.net.InetAddress, AtomicInteger> perIp =
+  private final java.util.concurrent.ConcurrentHashMap<java.net.InetAddress, Integer> perIp =
       new java.util.concurrent.ConcurrentHashMap<>();
   private final AtomicLong refused = new AtomicLong();
   private volatile long lastRefusalLogMs;
@@ -149,15 +149,21 @@ public final class NioServer implements Closeable {
     while (running) {
       try {
         SocketChannel ch = serverChannel.accept();
-        java.net.InetAddress ip = ((InetSocketAddress) ch.getRemoteAddress()).getAddress();
-        if (!admit(ip)) {
+        InetSocketAddress remote = (InetSocketAddress) ch.getRemoteAddress();
+        if (!admit(remote.getAddress())) {
           ch.close();
           continue;
         }
-        ch.configureBlocking(false);
-        ch.socket().setTcpNoDelay(true);
+        try {
+          ch.configureBlocking(false);
+          ch.socket().setTcpNoDelay(true);
+        } catch (IOException e) {
+          release(remote.getAddress());
+          ch.close();
+          continue;
+        }
         int idx = Math.floorMod(nextProcessor.getAndIncrement(), processors.length);
-        processors[idx].assign(ch);
+        processors[idx].assign(new Accepted(ch, remote));
       } catch (ClosedChannelException e) {
         return;
       } catch (IOException e) {
@@ -168,29 +174,45 @@ public final class NioServer implements Closeable {
     }
   }
 
-  /** Reserves a slot for a new connection from {@code ip}, or refuses it. */
+  /** A connection the acceptor admitted, with the address its slot is counted under. */
+  private record Accepted(SocketChannel channel, InetSocketAddress remote) {}
+
+  /**
+   * Reserves a slot for a new connection from {@code ip}, or refuses it. The per-address count is
+   * changed only inside {@code compute}, so an admit and a concurrent release on an IO thread
+   * cannot lose an update.
+   */
   private boolean admit(java.net.InetAddress ip) {
-    AtomicInteger fromIp = perIp.computeIfAbsent(ip, k -> new AtomicInteger());
-    if (accepted.incrementAndGet() > maxConnections
-        || fromIp.incrementAndGet() > maxConnectionsPerIp) {
-      release(ip);
+    boolean admitted = false;
+    if (accepted.incrementAndGet() <= maxConnections) {
+      boolean[] ok = {false};
+      perIp.compute(
+          ip,
+          (k, n) -> {
+            int count = n == null ? 0 : n;
+            if (count >= maxConnectionsPerIp) {
+              return n;
+            }
+            ok[0] = true;
+            return count + 1;
+          });
+      admitted = ok[0];
+    }
+    if (!admitted) {
+      accepted.decrementAndGet();
       long n = refused.incrementAndGet();
       long now = System.currentTimeMillis();
       if (now - lastRefusalLogMs > 10_000) {
         lastRefusalLogMs = now;
         LOG.warn("connection refused: limit reached", "client", ip.getHostAddress(), "refused", n);
       }
-      return false;
     }
-    return true;
+    return admitted;
   }
 
   private void release(java.net.InetAddress ip) {
     accepted.decrementAndGet();
-    AtomicInteger fromIp = perIp.get(ip);
-    if (fromIp != null && fromIp.decrementAndGet() <= 0) {
-      perIp.remove(ip, fromIp);
-    }
+    perIp.computeIfPresent(ip, (k, n) -> n <= 1 ? null : n - 1);
   }
 
   @Override
@@ -248,7 +270,7 @@ public final class NioServer implements Closeable {
 
   private final class Processor extends Thread {
     private final Selector selector;
-    private final Queue<SocketChannel> newConnections = new ConcurrentLinkedQueue<>();
+    private final Queue<Accepted> newConnections = new ConcurrentLinkedQueue<>();
     private final Queue<Connection> ready = new ConcurrentLinkedQueue<>();
     private final List<Connection> connections = new ArrayList<>();
 
@@ -258,8 +280,8 @@ public final class NioServer implements Closeable {
       this.selector = Selector.open();
     }
 
-    void assign(SocketChannel ch) {
-      newConnections.add(ch);
+    void assign(Accepted a) {
+      newConnections.add(a);
       selector.wakeup();
     }
 
@@ -321,22 +343,19 @@ public final class NioServer implements Closeable {
     }
 
     private void registerNew() {
-      SocketChannel ch;
-      while ((ch = newConnections.poll()) != null) {
+      Accepted a;
+      while ((a = newConnections.poll()) != null) {
+        SocketChannel ch = a.channel();
         try {
-          InetSocketAddress remote = (InetSocketAddress) ch.getRemoteAddress();
           Connection c =
-              new Connection(connectionIds.incrementAndGet(), ch, String.valueOf(remote));
-          c.ip = remote.getAddress();
+              new Connection(connectionIds.incrementAndGet(), ch, String.valueOf(a.remote()));
+          c.ip = a.remote().getAddress();
           c.key = ch.register(selector, SelectionKey.OP_READ, c);
           connections.add(c);
           openConnections.incrementAndGet();
         } catch (IOException e) {
-          try {
-            release(((InetSocketAddress) ch.getRemoteAddress()).getAddress());
-          } catch (IOException | RuntimeException ignored) {
-            // the slot leaks only if the address is unknown, which accept already resolved
-          }
+          // The address comes from accept time, so the slot is released even for a dead socket.
+          release(a.remote().getAddress());
           try {
             ch.close();
           } catch (IOException ignored) {
