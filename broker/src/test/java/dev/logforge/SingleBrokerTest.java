@@ -204,6 +204,9 @@ class SingleBrokerTest {
                 w -> new Topics.DeleteRequest(5_000, List.of("gone")).write(w)));
     assertThat(r.topics().get(0).errorCode()).isEqualTo(Errors.NONE.code());
     TestNodes.awaitTrue(() -> !node.hasPartition("gone", 0), Duration.ofSeconds(10));
-    assertThat(java.nio.file.Files.exists(dir.resolve("node-0").resolve("gone-0"))).isFalse();
+    // The broker drops the partition from its map, then deletes the files: wait for the files.
+    java.nio.file.Path partitionDir = dir.resolve("node-0").resolve("gone-0");
+    TestNodes.awaitTrue(() -> !java.nio.file.Files.exists(partitionDir), Duration.ofSeconds(10));
+    assertThat(java.nio.file.Files.exists(partitionDir)).isFalse();
   }
 }
