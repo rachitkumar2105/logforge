@@ -17,6 +17,7 @@ export function Header() {
         {/* 44 px touch targets (WCAG 2.5.8 asks for at least 24). */}
         <ul className="ml-auto flex flex-wrap gap-x-5 text-sm [&_a]:inline-flex [&_a]:min-h-[44px] [&_a]:items-center">
           <li><Link href="/#topology">Topology</Link></li>
+          <li><Link href="/#lab">Lab</Link></li>
           <li><Link href="/#replay">Replay</Link></li>
           <li><Link href="/#explorer">Explorer</Link></li>
           <li><Link href="/#benchmarks">Benchmarks</Link></li>
