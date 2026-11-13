@@ -331,3 +331,17 @@ Every previous benchmark number is replaced. The earlier run (2026-10-26) had Ka
 - One benchmark run per configuration: no error bars.
 - The re-measurement used the WSL 2 laptop with Docker Desktop's Kubernetes running in the background, for both systems.
 
+
+## Site: replication lab and live hero console (2026-11-13)
+
+A browser-side model of one partition (replication factor 3, `acks=all`, `min.insync.replicas=2`) built from the broker's decision rules and default timings (`NodeConfig`: heartbeat 250 ms, session timeout 3 s, replica lag 10 s, fetch wait 200 ms). It drives the new "Replication lab" section and the hero console. It is a model: the page labels it as such and never presents its counts as measurements.
+
+### Verified
+- `node --test scripts/replicationSim.test.mjs` (Node 24.22.3): 10 tests, 10 pass, 0 fail. Covers steady-state acks, no ack above the HW, fencing after the session timeout and election from the ISR (epoch + 1), truncation of a returning leader's unacknowledged tail, ISR shrink by session timeout (paused) and by replica lag (stalled fetcher), refusal below `min.insync.replicas`, clean election leaving the partition offline with nothing lost, unclean election losing acknowledged records, determinism per seed.
+- `pnpm test`: 23 tests, 23 pass. `pnpm typecheck` and `pnpm lint`: clean.
+- `next build` succeeded (Google Fonts mocked locally because the build container has no network to fonts.googleapis.com; Vercel fetches them normally). Production server checked in headless Chrome 1440 x 900 and 390 x 844: no console errors; kill-leader scenario fenced the leader 3.00 s after the kill and elected broker 2 at epoch 1; unclean scenario reported acknowledged records lost; stalled follower left the ISR 10 s after the stall.
+- `prefers-reduced-motion: reduce`: hero console does not run, the lab does not auto-start and runs only after "Run"; cell and event animations are off.
+
+### Not verified / assumed
+- The model does not reproduce AlterIsr round trips (ISR changes apply instantly), producer batching, idempotent retries or segment I/O. Fetch round trip (30 ms) and the produce timeout (5 s) are model parameters, not broker settings.
+- Not yet checked in Safari or Firefox.
