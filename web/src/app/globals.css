@@ -1,36 +1,24 @@
 @import "tailwindcss";
 
-/* Tokens from docs/DESIGN.md. Dark first; light theme for prefers-color-scheme: light. */
+/* Tokens from docs/DESIGN.md: Buttercream and Espresso. One warm light theme.
+   60% cream background, 30% espresso structure and text, 10% caramel accent.
+   Caramel (#c88a36) is 2.7:1 on cream, so it is used for fills, borders and large marks only;
+   text that carries the accent uses --accent-ink (5.5:1). */
 :root {
-  --bg: #0a0d10;
-  --panel: #0f1418;
-  --panel-2: #141b21;
-  --line: #26313a;
-  --text: #e6edf3;
-  --muted: #93a1ad;
-  --accent: #3ddbc4;
-  --accent-dim: #1f6f64;
-  --fail: #ff5c57;
-  --warn-line: #5a6670;
+  --bg: #faf6eb;
+  --panel: #fffcf4;
+  --panel-2: #f3ecdb;
+  --line: #e2d7c2;
+  --text: #2c1e16;
+  --muted: #6b5a4e;
+  --accent: #c88a36;
+  --accent-ink: #8a5a1c;
+  --accent-dim: #e6cfa4;
+  --fail: #b23a2e;
+  --warn-line: #9c8b7c;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-state: cubic-bezier(0.65, 0, 0.35, 1);
-  color-scheme: dark;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f6f7f8;
-    --panel: #ffffff;
-    --panel-2: #eef1f3;
-    --line: #d4dade;
-    --text: #11171c;
-    --muted: #4c5963;
-    --accent: #0a776a;
-    --accent-dim: #9ad9cf;
-    --fail: #c42b26;
-    --warn-line: #9aa6ae;
-    color-scheme: light;
-  }
+  color-scheme: light;
 }
 
 @theme inline {
@@ -131,7 +119,7 @@ table {
 }
 
 a {
-  color: var(--accent);
+  color: var(--accent-ink);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
@@ -174,6 +162,7 @@ a:hover {
   color: var(--text);
   font-family: var(--font-mono);
   font-size: 0.875rem;
+  text-decoration: none;
   cursor: pointer;
   /* Only transform animates; the hover border changes instantly. */
   transition: transform 150ms var(--ease-out);
@@ -319,4 +308,200 @@ details > summary {
   .broker-dot[data-phase="waking"] {
     animation: none !important;
   }
+}
+
+/* ---------------------------------------------------------------- replication lab */
+
+.lab-readouts {
+  background: var(--line);
+}
+
+.lab-tape {
+  display: grid;
+  grid-template-columns: repeat(28, minmax(0, 1fr));
+  gap: 3px;
+  height: 26px;
+}
+
+.lab-slot {
+  position: relative;
+  border-radius: 2px;
+  border: 1px dashed color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.lab-slot[data-state="committed"] {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.lab-slot[data-state="pending"] {
+  background: var(--panel-2);
+  border: 1px solid var(--accent);
+  animation: cell-in 260ms var(--ease-out) both;
+}
+
+.lab-slot[data-state="divergent"] {
+  border: 1.5px dashed var(--warn-line);
+}
+
+@keyframes cell-in {
+  from {
+    opacity: 0.2;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The high watermark: a bar just before the first uncommitted offset (or after the last cell). */
+.lab-slot[data-hw]::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--text);
+  border-radius: 1px;
+}
+
+.lab-slot[data-hw="edge"]::before {
+  left: -3px;
+}
+
+.lab-slot[data-hw="end"]::before {
+  right: -4px;
+}
+
+.lab-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.lab-swatch[data-state="committed"] {
+  background: var(--accent);
+}
+
+.lab-swatch[data-state="pending"] {
+  border: 1px solid var(--accent);
+}
+
+.lab-swatch[data-state="divergent"] {
+  border: 1.5px dashed var(--warn-line);
+}
+
+.lab-row {
+  transition: opacity 300ms var(--ease-state);
+}
+
+.lab-row[data-failing="true"] {
+  border-color: color-mix(in srgb, var(--fail) 55%, var(--line));
+}
+
+.lab-row[data-failing="true"] .lab-tape {
+  opacity: 0.55;
+}
+
+.lab-row[data-role="leader"]:not([data-failing="true"]) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
+.lab-event {
+  animation: event-in 360ms var(--ease-out) both;
+}
+
+@keyframes event-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: var(--line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lab-slot,
+  .lab-row,
+  .lab-event {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------- hero console */
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+
+.btn-primary:hover {
+  color: var(--bg);
+}
+
+.hero-tape {
+  display: grid;
+  grid-template-columns: repeat(18, minmax(0, 1fr));
+  gap: 3px;
+  height: 18px;
+  transition: opacity 300ms var(--ease-state);
+}
+
+.hero-tape[data-failing="true"] {
+  opacity: 0.4;
+}
+
+.hero-cell {
+  border-radius: 2px;
+  border: 1px dashed color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.hero-cell[data-c="c"] {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.hero-cell[data-c="p"] {
+  background: var(--panel-2);
+  border: 1px solid var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-tape {
+    transition: none;
+  }
+}
+
+/* Accent as text always uses the darker ink so it stays readable on cream (unlayered, so it wins
+   over the Tailwind utility). Fills and borders keep the caramel itself. */
+.text-accent {
+  color: var(--accent-ink);
+}
+
+.btn[aria-pressed="true"] {
+  color: var(--accent-ink);
+}
+
+.btn-primary,
+.btn-primary:hover {
+  color: var(--text);
+}
+
+/* Committed cells: a darker edge keeps the caramel fill above 3:1 against the cream. */
+.lab-slot[data-state="committed"],
+.hero-cell[data-c="c"] {
+  border-color: var(--accent-ink);
 }

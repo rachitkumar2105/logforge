@@ -7,6 +7,7 @@ import { Benchmarks } from "@/components/Benchmarks";
 import { Hero } from "@/components/Hero";
 import { Limitations } from "@/components/Limitations";
 import { Replay } from "@/components/Replay";
+import { ReplicationLab } from "@/components/ReplicationLab";
 import { SegmentExplorer } from "@/components/SegmentExplorer";
 import { Footer, Header, REPO_URL } from "@/components/SiteChrome";
 import { Topology } from "@/components/Topology";
@@ -27,6 +28,7 @@ export default function Home() {
       <main id="main">
         <Hero headline={headline} />
         <Topology />
+        <ReplicationLab />
         <Replay data={replayData as unknown as ReplayData} chaos={chaos.find((c) => c.scenario === "leader-kill")} />
         <SegmentExplorer sample={segmentSample as unknown as SegmentSample} />
         <Benchmarks results={bench} repoUrl={REPO_URL} />
