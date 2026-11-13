@@ -1,5 +1,6 @@
 import type { BenchResult } from "@/lib/types";
 import { fixed, int, recordSize } from "@/lib/format";
+import { HeroConsole } from "./HeroConsole";
 import { TapeToggle } from "./TapeToggle";
 
 /** The partition tape: record batches of varying width drifting along an offset rail. */
@@ -57,21 +58,34 @@ export function Hero({ headline }: { headline: BenchResult | undefined }) {
       <TapeBackground />
       <TapeToggle />
       <div className="wrap relative pt-16 pb-44 md:pt-24 md:pb-52">
-        <p className="label mb-6">Distributed commit log / Java 21 / no Kafka libraries in the broker</p>
-        <h1 id="hero-title" className="h1 max-w-4xl" translate="no">
-          LogForge
-        </h1>
-        <p className="mt-6 max-w-2xl text-muted">
-          A Kafka-style distributed log written from scratch: segmented files, a sparse offset index, leader and
-          follower replication with an in-sync set, consumer groups, idempotent producers and compaction. Every
-          durability claim on this page comes from a test that killed a process.
-        </p>
-        <p className="mt-4 max-w-2xl text-sm text-muted">
-          <strong className="font-semibold text-text">Live and recorded, plainly.</strong> The hosted demo is a single
-          broker on a free tier: it proves the broker runs, and the topology section shows it when it is awake. The
-          durability and throughput claims rest on the crash-recovery replay and on the benchmark and chaos results,
-          all measured on a local three-node cluster and committed to the repository.
-        </p>
+        <div className="grid gap-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-start lg:gap-16">
+          <div>
+            <p className="label mb-6">Distributed commit log / Java 21 / no Kafka libraries in the broker</p>
+            <h1 id="hero-title" className="h1 max-w-4xl" translate="no">
+              LogForge
+            </h1>
+            <p className="mt-6 max-w-2xl text-muted">
+              A Kafka-style distributed log written from scratch: segmented files, a sparse offset index, leader and
+              follower replication with an in-sync set, consumer groups, idempotent producers and compaction. Every
+              durability claim on this page comes from a test that killed a process.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <a href="#lab" className="btn btn-primary no-underline">
+                Break the cluster yourself
+              </a>
+              <a href="#replay" className="btn no-underline">
+                Watch the crash replay
+              </a>
+            </div>
+            <p className="mt-8 max-w-2xl text-sm text-muted">
+              <strong className="font-semibold text-text">Live and recorded, plainly.</strong> The hosted demo is a
+              single broker on a free tier: it proves the broker runs, and the topology section shows it when it is
+              awake. The durability and throughput claims rest on the crash-recovery replay and on the benchmark and
+              chaos results, all measured on a local three-node cluster and committed to the repository.
+            </p>
+          </div>
+          <HeroConsole />
+        </div>
         {r && c ? (
           <div className="mt-12 grid gap-2">
             <p className="label">Measured throughput, local three-broker cluster</p>

@@ -10,12 +10,13 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --test scripts/lookup.test.mjs scripts/brokerStatus.test.mjs scripts/adminUrl.test.mjs scripts/benchReading.test.mjs"
+    "test": "node --test scripts/lookup.test.mjs scripts/brokerStatus.test.mjs scripts/adminUrl.test.mjs scripts/benchReading.test.mjs scripts/replicationSim.test.mjs"
   },
   "packageManager": "pnpm@9.15.4",
   "pnpm": {
     "overrides": {
-      "next>postcss": "8.5.31"
+      "next>postcss": "8.5.31",
+      "minimatch@>=7.0.0 <11.0.1": "11.0.8"
     }
   },
   "dependencies": {

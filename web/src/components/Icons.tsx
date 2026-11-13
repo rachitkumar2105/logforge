@@ -80,3 +80,31 @@ export const ExternalIcon = (p: Props) => (
     <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
   </Icon>
 );
+
+export const PowerIcon = (p: Props) => (
+  <Icon {...p}>
+    <path d="M12 3v8" />
+    <path d="M6.6 6.6a7.5 7.5 0 1 0 10.8 0" />
+  </Icon>
+);
+
+export const RotateIcon = (p: Props) => (
+  <Icon {...p}>
+    <path d="M4 12a8 8 0 1 0 2.6-5.9" />
+    <path d="M4 4v4.5h4.5" />
+  </Icon>
+);
+
+export const SendIcon = (p: Props) => (
+  <Icon {...p}>
+    <path d="M4 12h13" />
+    <path d="M12 6l6 6-6 6" />
+  </Icon>
+);
+
+export const SlowIcon = (p: Props) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 7.5V12l3 2" />
+  </Icon>
+);

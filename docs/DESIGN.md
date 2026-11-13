@@ -12,22 +12,23 @@ Source: spec Phase 9 and the author's global website rules. The `design-taste-fr
 
 ## Tokens
 
-Dark-first; a light theme exists for `prefers-color-scheme: light` but the design is tuned for dark.
+One warm light theme, "Buttercream and Espresso" (changed 2026-11-13 at the author's request, replacing the dark-first teal theme): 60 % cream background, 30 % espresso structure and text, 10 % caramel accent. Muted natural tones instead of a cold dark console.
 
-| Token | Dark | Light | Use |
-|---|---|---|---|
-| `--bg` | `#0a0d10` | `#f6f7f8` | page |
-| `--panel` | `#0f1418` | `#ffffff` | panels |
-| `--panel-2` | `#141b21` | `#eef1f3` | insets, tape cells |
-| `--line` | `#26313a` | `#d4dade` | hairlines, frames |
-| `--text` | `#e6edf3` | `#11171c` | body text |
-| `--muted` | `#93a1ad` | `#4c5963` | labels (contrast >= 4.5:1 on `--bg` and `--panel`) |
-| `--accent` | `#3ddbc4` (teal) | `#0a776a` | leaders, live data, focus, links |
-| `--accent-dim` | `#1f6f64` | `#9ad9cf` | followers in sync, secondary series |
-| `--fail` | `#ff5c57` | `#c42b26` | **only** failure, offline and under-replicated states |
-| `--warn-line` | `#5a6670` | `#9aa6ae` | out-of-sync follower outline (neutral, not a colour signal) |
+| Token | Value | Use |
+|---|---|---|
+| `--bg` | `#faf6eb` | page (soft vanilla cream) |
+| `--panel` | `#fffcf4` | panels |
+| `--panel-2` | `#f3ecdb` | insets, tape cells, buttons |
+| `--line` | `#e2d7c2` | hairlines, frames |
+| `--text` | `#2c1e16` | body text (espresso, 14.9:1 on `--bg`) |
+| `--muted` | `#6b5a4e` | labels (6.1:1 on `--bg`) |
+| `--accent` | `#c88a36` | caramel: leaders, live data, fills, borders, primary button (espresso text on it, 5.5:1) |
+| `--accent-ink` | `#8a5a1c` | accent used as text and links (5.5:1 on `--bg`); caramel itself is 2.7:1, so never body-size text |
+| `--accent-dim` | `#e6cfa4` | secondary series |
+| `--fail` | `#b23a2e` | **only** failure, offline and under-replicated states (5.5:1) |
+| `--warn-line` | `#9c8b7c` | out-of-sync follower outline (neutral, 3.0:1) |
 
-Rules: teal is the only accent. Red appears only when something is broken. No gradients except a 1-px hairline glow on the live indicator. No glassmorphism, no purple, no rainbow, no emoji icons, no stock photos, no fabricated numbers, no "made with" badges, no em dashes in copy.
+Rules: caramel is the only accent. Red appears only when something is broken. No gradients. No glassmorphism, no purple, no rainbow, no emoji icons, no stock photos, no fabricated numbers, no "made with" badges, no em dashes in copy.
 
 ## Type
 
@@ -57,4 +58,11 @@ Inline SVG, 24 x 24 grid, 1.5 px stroke, round caps, `currentColor`. A small set
 
 ## Accessibility
 
-Skip link, landmarks (`header`, `nav`, `main`, `section` with headings, `footer`), visible 2 px teal focus ring with offset on every interactive element, `aria-live="polite"` on the live topology status and the replay readout, a data table for every chart and for the topology, keyboard control of the replay scrubber (arrow keys, Home, End, Space).
+Skip link, landmarks (`header`, `nav`, `main`, `section` with headings, `footer`), visible 2 px caramel focus ring with offset on every interactive element, `aria-live="polite"` on the live topology status and the replay readout, a data table for every chart and for the topology, keyboard control of the replay scrubber (arrow keys, Home, End, Space).
+
+## Replication lab and hero console (added 2026-11-13)
+
+- **Replication lab** (`#lab`, after the live topology): the tape vocabulary again, one tape per broker, offsets aligned in a fixed 28-slot grid so the three logs read as columns. Committed cells are filled caramel, written-but-uncommitted cells are caramel outlines, cells that disagree with the leader are dashed neutral. The HW is a single text-coloured bar. Red only for killed or fenced brokers and for acknowledged records lost.
+- **Hero console**: the same model, unattended, kills its own leader every 16 s so the first screen shows a real failover by the broker's rules. It has a pause control (WCAG 2.2.2) and does not run under reduced motion.
+- Both run on `requestAnimationFrame` only while on screen and while the tab is visible; React repaints at most every 66 to 90 ms; the model steps in fixed 10 ms increments so behaviour does not depend on frame rate.
+- No inline `style` attributes in server-rendered markup (the CSP is nonce-based); positions come from CSS grid and data attributes.
